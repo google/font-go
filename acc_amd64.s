@@ -20,9 +20,6 @@
 
 // TODO: cpuid for AVX? Or can we do this in SSE?
 
-// TODO: do &dst[0] and &src[0] need to be 16-byte aligned? VMOVUPS instead of
-// VMOVAPS?
-
 // func accumulateSIMD(dst []uint8, src []float32)
 //
 // XMM registers. Names are per
@@ -87,8 +84,8 @@ loop:
 	//
 	// Where s0 is src[0], s1 is src[1], etc.
 	//
-	// vmovaps (%rsi),%xmm1
-	BYTE $0xc5; BYTE $0xf8; BYTE $0x28; BYTE $0x0e
+	// vmovups (%rsi),%xmm1
+	BYTE $0xc5; BYTE $0xf8; BYTE $0x10; BYTE $0x0e
 
 	// scratch = XMM(0, s0, s1, s2)
 	// x += scratch // yields x == XMM(s0, s0+s1, s1+s2, s2+s3)

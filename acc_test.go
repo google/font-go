@@ -20,6 +20,21 @@ import (
 	"testing"
 )
 
+func TestAccumulateSIMDUnaligned(t *testing.T) {
+	if !haveAccumulateSIMD {
+		t.Skip("No accumulateSIMD implemention")
+	}
+
+	dst := make([]uint8, 64)
+	src := make([]float32, 64)
+
+	for d := 0; d < 16; d++ {
+		for s := 0; s < 16; s++ {
+			accumulateSIMD(dst[d:d+32], src[s:s+32])
+		}
+	}
+}
+
 func TestAccumulate(t *testing.T)             { testAccumulate(t, false) }
 func TestAccumulateSIMD(t *testing.T)         { testAccumulate(t, true) }
 func BenchmarkAccumulate16(b *testing.B)      { benchAccumulate(b, robotoG16, false) }
