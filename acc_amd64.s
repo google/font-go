@@ -18,8 +18,6 @@
 
 #include "textflag.h"
 
-// TODO: cpuid for AVX? Or can we do this in SSE?
-
 // func accumulateSIMD(dst []uint8, src []float32)
 //
 // XMM registers. Names are per
@@ -33,7 +31,7 @@
 //	xmm5	signMask
 //	xmm6	mask
 //	xmm7	offset
-TEXT ·accumulateSIMD(SB), NOSPLIT, $8-48
+TEXT ·accumulateSIMD(SB), NOSPLIT, $16-48
 	MOVQ dst_base+0(FP), DI
 	MOVQ src_base+24(FP), SI
 	MOVQ src_len+32(FP), R9
@@ -44,36 +42,39 @@ TEXT ·accumulateSIMD(SB), NOSPLIT, $8-48
 	// AX holds the variable i.
 	MOVQ $0, AX
 
+	// TODO: make these 0x437f0000s etc static data instead of code.
+	//
 	// twoFiftyFives := XMM(0x437f0000 repeated four times) // 255 as a float32.
 	// ones          := XMM(0x3f800000 repeated four times) // 1 as a float32.
-	// signMask      := XMM(0x80000000 repeated four times) // The sign bit of a float32.
+	// signMask      := XMM(0x7fffffff repeated four times) // All but the sign bit of a float32.
 	// mask          := XMM(0x0c080400 repeated four times) // Shuffle mask.
-	//
-	// movl etc
-	// vbroadcastss (%rsp),%xmm3
-	// movl etc
-	// vbroadcastss (%rsp),%xmm4
-	// movl etc
-	// vbroadcastss (%rsp),%xmm5
-	// movl etc
-	// vbroadcastss (%rsp),%xmm6
-	//
-	// Note that broadcast-8(SP) is an offset (-8) to a pseudo-register. The
-	// offset to the physical register is 0. See https://golang.org/doc/asm and
-	// "The SP pseudo-register is a virtual stack pointer...".
-	MOVL $0x437f0000, broadcast-8(SP)
-	BYTE $0xc4; BYTE $0xe2; BYTE $0x79; BYTE $0x18; BYTE $0x1c; BYTE $0x24
-	MOVL $0x3f800000, broadcast-8(SP)
-	BYTE $0xc4; BYTE $0xe2; BYTE $0x79; BYTE $0x18; BYTE $0x24; BYTE $0x24
-	MOVL $0x80000000, broadcast-8(SP)
-	BYTE $0xc4; BYTE $0xe2; BYTE $0x79; BYTE $0x18; BYTE $0x2c; BYTE $0x24
-	MOVL $0x0c080400, broadcast-8(SP)
-	BYTE $0xc4; BYTE $0xe2; BYTE $0x79; BYTE $0x18; BYTE $0x34; BYTE $0x24
+	MOVL  $0x437f0000, BX
+	MOVL  BX, broadcast-16(SP)
+	MOVL  BX, broadcast1-12(SP)
+	MOVL  BX, broadcast2-8(SP)
+	MOVL  BX, broadcast3-4(SP)
+	MOVOU broadcast-16(SP), X3
+	MOVL  $0x3f800000, BX
+	MOVL  BX, broadcast-16(SP)
+	MOVL  BX, broadcast1-12(SP)
+	MOVL  BX, broadcast2-8(SP)
+	MOVL  BX, broadcast3-4(SP)
+	MOVOU broadcast-16(SP), X4
+	MOVL  $0x7fffffff, BX
+	MOVL  BX, broadcast-16(SP)
+	MOVL  BX, broadcast1-12(SP)
+	MOVL  BX, broadcast2-8(SP)
+	MOVL  BX, broadcast3-4(SP)
+	MOVOU broadcast-16(SP), X5
+	MOVL  $0x0c080400, BX
+	MOVL  BX, broadcast-16(SP)
+	MOVL  BX, broadcast1-12(SP)
+	MOVL  BX, broadcast2-8(SP)
+	MOVL  BX, broadcast3-4(SP)
+	MOVOU broadcast-16(SP), X6
 
 	// offset = XMM(0, 0, 0, 0)
-	//
-	// vxorps %xmm7,%xmm7,%xmm7
-	BYTE $0xc5; BYTE $0xc0; BYTE $0x57; BYTE $0xff
+	XORPS X7, X7
 
 loop:
 	// for i < len(src)
@@ -83,62 +84,42 @@ loop:
 	// x = XMM(s0, s1, s2, s3)
 	//
 	// Where s0 is src[0], s1 is src[1], etc.
-	//
-	// vmovups (%rsi),%xmm1
-	BYTE $0xc5; BYTE $0xf8; BYTE $0x10; BYTE $0x0e
+	MOVOU (SI), X1
 
 	// scratch = XMM(0, s0, s1, s2)
 	// x += scratch // yields x == XMM(s0, s0+s1, s1+s2, s2+s3)
-	//
-	// vmovaps %xmm1,%xmm0
-	// vpslldq $0x4,%xmm0,%xmm0
-	// vaddps %xmm0,%xmm1,%xmm1
-	BYTE $0xc5; BYTE $0xf8; BYTE $0x28; BYTE $0xc1
-	BYTE $0xc5; BYTE $0xf9; BYTE $0x73; BYTE $0xf8; BYTE $0x04
-	BYTE $0xc5; BYTE $0xf0; BYTE $0x58; BYTE $0xc8
+	MOVO  X1, X0
+	PSLLO $4, X0
+	ADDPS X0, X1
 
 	// scratch = XMM(0, 0, 0, 0)
 	// scratch = XMM(scratch@0, scratch@0, x@0, x@1) // yields scratch == XMM(0, 0, s0, s0+s1)
 	// x += scratch // yields x == XMM(s0, s0+s1, s0+s1+s2, s0+s1+s2+s3)
-	//
-	// vxorps %xmm0,%xmm0,%xmm0
-	// vshufps $0x40,%xmm1,%xmm0,%xmm0
-	// vaddps %xmm0,%xmm1,%xmm1
-	BYTE $0xc5; BYTE $0xf8; BYTE $0x57; BYTE $0xc0
-	BYTE $0xc5; BYTE $0xf8; BYTE $0xc6; BYTE $0xc1; BYTE $0x40
-	BYTE $0xc5; BYTE $0xf0; BYTE $0x58; BYTE $0xc8
+	XORPS  X0, X0
+	SHUFPS $0x40, X1, X0
+	ADDPS  X0, X1
 
 	// x += offset
-	//
-	// vaddps %xmm7,%xmm1,%xmm1
-	BYTE $0xc5; BYTE $0xf0; BYTE $0x58; BYTE $0xcf
+	ADDPS X7, X1
 
-	// y = x &^ signMask
+	// y = x & signMask
 	// y = min(y, ones)
 	// y = mul(y, twoFiftyFives)
-	//
-	// vandnps %xmm1,%xmm5,%xmm2
-	// vminps %xmm4,%xmm2,%xmm2
-	// vmulps %xmm3,%xmm2,%xmm2
-	BYTE $0xc5; BYTE $0xd0; BYTE $0x55; BYTE $0xd1
-	BYTE $0xc5; BYTE $0xe8; BYTE $0x5d; BYTE $0xd4
-	BYTE $0xc5; BYTE $0xe8; BYTE $0x59; BYTE $0xd3
+	MOVO  X5, X2
+	ANDPS X1, X2
+	MINPS X4, X2
+	MULPS X3, X2
 
 	// z = float32ToInt32(y)
 	// z = shuffleTheLowBytesOfEach4ByteElement(z)
 	// copy(dst[:4], low4BytesOf(z))
-	//
-	// vcvtps2dq %xmm2,%xmm2
-	// vpshufb %xmm6,%xmm2,%xmm2
-	// vmovd %xmm2,(%rdi)
-	BYTE $0xc5; BYTE $0xf9; BYTE $0x5b; BYTE $0xd2
-	BYTE $0xc4; BYTE $0xe2; BYTE $0x69; BYTE $0x00; BYTE $0xd6
-	BYTE $0xc5; BYTE $0xf9; BYTE $0x7e; BYTE $0x17
+	CVTPS2PL X2, X2
+	PSHUFB   X6, X2
+	MOVL     X2, (DI)
 
 	// offset = XMM(x@3, x@3, x@3, x@3)
-	//
-	// vshufps $0xff,%xmm1,%xmm1,%xmm7
-	BYTE $0xc5; BYTE $0xf0; BYTE $0xc6; BYTE $0xf9; BYTE $0xff
+	MOVO   X1, X7
+	SHUFPS $0xff, X1, X7
 
 	// i += 4
 	// dst = dst[4:]

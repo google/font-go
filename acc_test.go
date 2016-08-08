@@ -104,9 +104,10 @@ func benchAccumulate(b *testing.B, rawSrc []float32, simd bool) {
 	}
 }
 
-func BenchmarkRasterize100(b *testing.B) {
-	const ppem = 100
+func BenchmarkRasterize16(b *testing.B)  { benchRasterize(b, 16) }
+func BenchmarkRasterize100(b *testing.B) { benchRasterize(b, 100) }
 
+func benchRasterize(b *testing.B, ppem float32) {
 	fontData, err := ioutil.ReadFile(*fontFlag)
 	if err != nil {
 		b.Fatal(err)
