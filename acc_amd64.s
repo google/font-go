@@ -18,6 +18,20 @@
 
 #include "textflag.h"
 
+DATA twoFiftyFives<>+0x00(SB)/8, $0x437f0000437f0000
+DATA twoFiftyFives<>+0x08(SB)/8, $0x437f0000437f0000
+DATA ones<>+0x00(SB)/8, $0x3f8000003f800000
+DATA ones<>+0x08(SB)/8, $0x3f8000003f800000
+DATA signMask<>+0x00(SB)/8, $0x7fffffff7fffffff
+DATA signMask<>+0x08(SB)/8, $0x7fffffff7fffffff
+DATA mask<>+0x00(SB)/8, $0x0c0804000c080400
+DATA mask<>+0x08(SB)/8, $0x0c0804000c080400
+
+GLOBL twoFiftyFives<>(SB), (NOPTR+RODATA), $16
+GLOBL ones<>(SB), (NOPTR+RODATA), $16
+GLOBL signMask<>(SB), (NOPTR+RODATA), $16
+GLOBL mask<>(SB), (NOPTR+RODATA), $16
+
 // func accumulateSIMD(dst []uint8, src []float32)
 //
 // XMM registers. Names are per
@@ -31,7 +45,7 @@
 //	xmm5	signMask
 //	xmm6	mask
 //	xmm7	offset
-TEXT ·accumulateSIMD(SB), NOSPLIT, $16-48
+TEXT ·accumulateSIMD(SB), NOSPLIT, $0-48
 	MOVQ dst_base+0(FP), DI
 	MOVQ src_base+24(FP), SI
 	MOVQ src_len+32(FP), R9
@@ -39,42 +53,19 @@ TEXT ·accumulateSIMD(SB), NOSPLIT, $16-48
 	// TODO: clean up the tail if len(src)%4 != 0.
 	ANDQ $-4, R9
 
-	// AX holds the variable i.
-	MOVQ $0, AX
-
-	// TODO: make these 0x437f0000s etc static data instead of code.
-	//
 	// twoFiftyFives := XMM(0x437f0000 repeated four times) // 255 as a float32.
 	// ones          := XMM(0x3f800000 repeated four times) // 1 as a float32.
 	// signMask      := XMM(0x7fffffff repeated four times) // All but the sign bit of a float32.
 	// mask          := XMM(0x0c080400 repeated four times) // Shuffle mask.
-	MOVL  $0x437f0000, BX
-	MOVL  BX, broadcast-16(SP)
-	MOVL  BX, broadcast1-12(SP)
-	MOVL  BX, broadcast2-8(SP)
-	MOVL  BX, broadcast3-4(SP)
-	MOVOU broadcast-16(SP), X3
-	MOVL  $0x3f800000, BX
-	MOVL  BX, broadcast-16(SP)
-	MOVL  BX, broadcast1-12(SP)
-	MOVL  BX, broadcast2-8(SP)
-	MOVL  BX, broadcast3-4(SP)
-	MOVOU broadcast-16(SP), X4
-	MOVL  $0x7fffffff, BX
-	MOVL  BX, broadcast-16(SP)
-	MOVL  BX, broadcast1-12(SP)
-	MOVL  BX, broadcast2-8(SP)
-	MOVL  BX, broadcast3-4(SP)
-	MOVOU broadcast-16(SP), X5
-	MOVL  $0x0c080400, BX
-	MOVL  BX, broadcast-16(SP)
-	MOVL  BX, broadcast1-12(SP)
-	MOVL  BX, broadcast2-8(SP)
-	MOVL  BX, broadcast3-4(SP)
-	MOVOU broadcast-16(SP), X6
-
-	// offset = XMM(0, 0, 0, 0)
+	// offset        := XMM(0x00000000 repeated four times) // Cumulative sum.
+	MOVOU twoFiftyFives<>(SB), X3
+	MOVOU ones<>(SB), X4
+	MOVOU signMask<>(SB), X5
+	MOVOU mask<>(SB), X6
 	XORPS X7, X7
+
+	// i := 0
+	MOVQ $0, AX
 
 loop:
 	// for i < len(src)
@@ -88,7 +79,7 @@ loop:
 
 	// scratch = XMM(0, s0, s1, s2)
 	// x += scratch // yields x == XMM(s0, s0+s1, s1+s2, s2+s3)
-	MOVO  X1, X0
+	MOVOU X1, X0
 	PSLLO $4, X0
 	ADDPS X0, X1
 
@@ -105,7 +96,7 @@ loop:
 	// y = x & signMask
 	// y = min(y, ones)
 	// y = mul(y, twoFiftyFives)
-	MOVO  X5, X2
+	MOVOU X5, X2
 	ANDPS X1, X2
 	MINPS X4, X2
 	MULPS X3, X2
@@ -118,7 +109,7 @@ loop:
 	MOVL     X2, (DI)
 
 	// offset = XMM(x@3, x@3, x@3, x@3)
-	MOVO   X1, X7
+	MOVOU  X1, X7
 	SHUFPS $0xff, X1, X7
 
 	// i += 4
