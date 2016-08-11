@@ -3,6 +3,21 @@
 This is a port of https://github.com/google/font-rs to the Go programming
 language.
 
+You can visually inspect rasterization by running:
+
+```
+go build && ./font-go
+```
+
+and viewing the resultant out.png file.
+
+To run the benchmarks with and without SIMD assembler:
+
+```
+$ go test -test.bench=.
+$ go test -test.bench=. -tags=noasm
+```
+
 ## Authors
 
 The main author is Nigel Tao.
