@@ -77,9 +77,8 @@ func testAccumulate(t *testing.T, simd bool) {
 	for i := range got {
 		g := got[i]
 		w := want[i]
-		delta := int(g) - int(w)
-		if delta < -1 || +1 < delta {
-			t.Fatalf("i=%d: got %#02x, want %#02x +/- 1", i, g, w)
+		if g != w {
+			t.Fatalf("i=%d: got %#02x, want %#02x", i, g, w)
 		}
 	}
 }

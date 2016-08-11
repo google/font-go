@@ -45,13 +45,20 @@ GLOBL mask<>(SB), (NOPTR+RODATA), $16
 //	xmm5	signMask
 //	xmm6	mask
 //	xmm7	offset
-TEXT ·accumulateSIMD(SB), NOSPLIT, $0-48
+TEXT ·accumulateSIMD(SB), NOSPLIT, $8-48
 	MOVQ dst_base+0(FP), DI
 	MOVQ src_base+24(FP), SI
 	MOVQ src_len+32(FP), R9
 
 	// TODO: clean up the tail if len(src)%4 != 0.
 	ANDQ $-4, R9
+
+	// Set MXCSR bits 13 and 14, so that the CVTPS2PL below is "Round To Zero".
+	STMXCSR mxcsr-8(SP)
+	MOVL    mxcsr-8(SP), DX
+	ORL     $0x6000, DX
+	MOVL    DX, mxcsr-8(SP)
+	LDMXCSR mxcsr-8(SP)
 
 	// twoFiftyFives := XMM(0x437f0000 repeated four times) // 255 as a float32.
 	// ones          := XMM(0x3f800000 repeated four times) // 1 as a float32.
