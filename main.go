@@ -16,12 +16,15 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"image"
 	"image/png"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
+
+	"golang.org/x/image/math/f32"
 )
 
 var (
@@ -46,7 +49,7 @@ func main() {
 	// TODO: use the overall font's bbox from the head table, not the glyph's bbox.
 	dx, dy, transform := data.glyphSizeAndTransform(f.scale(float32(*ppemFlag)))
 	if *dumpFlag {
-		f.dumpGlyph(data, transform)
+		dump(f, data, transform)
 		return
 	}
 
@@ -67,5 +70,33 @@ func main() {
 	err = png.Encode(out, dst)
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func dump(f *Font, b glyphData, transform f32.Aff3) {
+	g := b.glyphIter()
+	if g.compoundGlyph() {
+		for g.nextSubGlyph() {
+			dump(f, f.glyphData(g.subGlyphID), concat(&transform, &g.subTransform))
+		}
+		return
+	}
+
+	for g.nextContour() {
+		fmt.Println("---")
+		if false {
+			// Explicit points only.
+			for g.nextPoint() {
+				fmt.Println(g.x, g.y, g.on)
+			}
+		} else {
+			// Include implicit points and transform.
+			for g.nextSegment() {
+				fmt.Printf("%d\t%v\t%v\n", g.seg.op,
+					mul(&transform, g.seg.p),
+					mul(&transform, g.seg.q),
+				)
+			}
+		}
 	}
 }

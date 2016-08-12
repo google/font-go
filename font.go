@@ -100,34 +100,6 @@ type Font struct {
 	maxp maxp
 }
 
-func (f *Font) dumpGlyph(b glyphData, transform f32.Aff3) {
-	g := b.glyphIter()
-	if g.compoundGlyph() {
-		for g.nextSubGlyph() {
-			f.dumpGlyph(f.glyphData(g.subGlyphID), concat(&transform, &g.subTransform))
-		}
-		return
-	}
-
-	for g.nextContour() {
-		fmt.Println("---")
-		if false {
-			// Explicit points only.
-			for g.nextPoint() {
-				fmt.Println(g.x, g.y, g.on)
-			}
-		} else {
-			// Include implicit points and transform.
-			for g.nextSegment() {
-				fmt.Printf("%d\t%v\t%v\n", g.seg.op,
-					mul(&transform, g.seg.p),
-					mul(&transform, g.seg.q),
-				)
-			}
-		}
-	}
-}
-
 func (f *Font) scale(ppem float32) float32 {
 	return ppem / float32(f.head.unitsPerEm())
 }
@@ -142,6 +114,31 @@ func (f *Font) glyphData(glyphID uint16) glyphData {
 	}
 	return glyphData(f.glyf[lo:hi])
 }
+
+type glyf []byte
+
+type head []byte
+
+func (b head) indexToLocFormat() int { return int(u16(b, 50)) }
+func (b head) unitsPerEm() int       { return int(u16(b, 18)) }
+
+type loca []byte
+
+func (b loca) glyfRange(glyphID uint16, indexToLocFormat int) (lo, hi uint32) {
+	// TODO: bounds checking throughout this method.
+	if indexToLocFormat == 0 {
+		lo = 2 * uint32(u16(b, 2*int(glyphID)+0))
+		hi = 2 * uint32(u16(b, 2*int(glyphID)+2))
+	} else {
+		lo = u32(b, 4*int(glyphID)+0)
+		hi = u32(b, 4*int(glyphID)+4)
+	}
+	return lo, hi
+}
+
+type maxp []byte
+
+func (b maxp) numGlyphs() int { return int(u16(b, 4)) }
 
 type glyphData []byte
 
@@ -257,31 +254,6 @@ func (b glyphData) glyphIter() glyphIter {
 		prevEnd: -1,
 	}
 }
-
-type glyf []byte
-
-type head []byte
-
-func (b head) indexToLocFormat() int { return int(u16(b, 50)) }
-func (b head) unitsPerEm() int       { return int(u16(b, 18)) }
-
-type loca []byte
-
-func (b loca) glyfRange(glyphID uint16, indexToLocFormat int) (lo, hi uint32) {
-	// TODO: bounds checking throughout this method.
-	if indexToLocFormat == 0 {
-		lo = 2 * uint32(u16(b, 2*int(glyphID)+0))
-		hi = 2 * uint32(u16(b, 2*int(glyphID)+2))
-	} else {
-		lo = u32(b, 4*int(glyphID)+0)
-		hi = u32(b, 4*int(glyphID)+4)
-	}
-	return lo, hi
-}
-
-type maxp []byte
-
-func (b maxp) numGlyphs() int { return int(u16(b, 4)) }
 
 const initialIndex = 10
 
