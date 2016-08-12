@@ -35,6 +35,21 @@ func TestAccumulateSIMDUnaligned(t *testing.T) {
 	}
 }
 
+func TestAccumulateSIMDShortDst(t *testing.T) {
+	if !haveAccumulateSIMD {
+		t.Skip("No accumulateSIMD implemention")
+	}
+
+	dst := make([]uint8, 4)
+	src := []float32{0.25, 0.25, 0.25, 0.25}
+	accumulateSIMD(dst[:0], src)
+	for i, got := range dst {
+		if got != 0 {
+			t.Errorf("i=%d: got %#02x, want %#02x", i, got, 0)
+		}
+	}
+}
+
 func TestAccumulate(t *testing.T)             { testAccumulate(t, false) }
 func TestAccumulateSIMD(t *testing.T)         { testAccumulate(t, true) }
 func BenchmarkAccumulate16(b *testing.B)      { benchAccumulate(b, robotoG16, false) }
