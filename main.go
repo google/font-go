@@ -28,7 +28,7 @@ var (
 	dumpFlag    = flag.Bool("dump", false, "print the vector data instead of rasterizing to out.png")
 	fontFlag    = flag.String("font", path.Join(os.Getenv("HOME"), "fonts/Roboto-Regular.ttf"), "font filename")
 	glyphIDFlag = flag.Int("glyphid", 76, "glyph ID; for example 76 is 'g' from Roboto-Regular")
-	ppemFlag    = flag.Int("ppem", 42, "pixels per em")
+	ppemFlag    = flag.Float64("ppem", 42, "pixels per em")
 )
 
 func main() {
@@ -42,16 +42,18 @@ func main() {
 		log.Fatal(err)
 	}
 
+	data := f.glyphData(uint16(*glyphIDFlag))
+	// TODO: use the overall font's bbox from the head table, not the glyph's bbox.
+	dx, dy, transform := data.glyphSizeAndTransform(f.scale(float32(*ppemFlag)))
 	if *dumpFlag {
-		f.dumpGlyph(uint16(*glyphIDFlag), float32(*ppemFlag))
+		f.dumpGlyph(data, transform)
 		return
 	}
 
-	z := newRasterizer(f.glyphSize(uint16(*glyphIDFlag), float32(*ppemFlag)))
+	z := newRasterizer(dx, dy)
+	z.rasterize(f, data, transform)
 	dst := image.NewAlpha(z.Bounds())
 	dst.Pix = make([]byte, len(dst.Pix)+accumulatorSlop)
-	z.rasterize(f, uint16(*glyphIDFlag), float32(*ppemFlag))
-
 	if haveAccumulateSIMD {
 		accumulateSIMD(dst.Pix, z.a[:z.w*z.h])
 	} else {

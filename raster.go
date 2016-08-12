@@ -38,6 +38,17 @@ func min(x, y float32) float32 {
 func floor(x float32) int { return int(math.Floor(float64(x))) }
 func ceil(x float32) int  { return int(math.Ceil(float64(x))) }
 
+func concat(a, b *f32.Aff3) f32.Aff3 {
+	return f32.Aff3{
+		a[0]*b[0] + a[1]*b[3],
+		a[0]*b[1] + a[1]*b[4],
+		a[0]*b[2] + a[1]*b[5] + a[2],
+		a[3]*b[0] + a[4]*b[3],
+		a[3]*b[1] + a[4]*b[4],
+		a[3]*b[2] + a[4]*b[5] + a[5],
+	}
+}
+
 // The SIMD code reads 4 float32s and writes 4 bytes at a time, which can
 // overrun buffers by up to 3 elements.
 const accumulatorSlop = 3
@@ -99,25 +110,34 @@ func (z *rasterizer) Bounds() image.Rectangle {
 	return image.Rectangle{Max: image.Point{z.w, z.h}}
 }
 
-func (z *rasterizer) rasterize(f *Font, glyphID uint16, ppem float32) {
+func (z *rasterizer) reset() {
 	for i := range z.a {
 		z.a[i] = 0
 	}
 	z.last = point{}
+}
 
-	g := f.glyphIter(glyphID, ppem)
+func (z *rasterizer) rasterize(f *Font, a glyphData, transform f32.Aff3) {
+	g := a.glyphIter()
+	if g.compoundGlyph() {
+		for g.nextSubGlyph() {
+			z.rasterize(f, f.glyphData(g.subGlyphID), concat(&transform, &g.subTransform))
+		}
+		return
+	}
+
 	for g.nextContour() {
 		for g.nextSegment() {
 			switch g.seg.op {
 			case moveTo:
-				z.last = mul(&g.transform, g.seg.p)
+				z.last = mul(&transform, g.seg.p)
 			case lineTo:
-				p := mul(&g.transform, g.seg.p)
+				p := mul(&transform, g.seg.p)
 				z.drawLine(z.last, p)
 				z.last = p
 			case quadTo:
-				p := mul(&g.transform, g.seg.p)
-				q := mul(&g.transform, g.seg.q)
+				p := mul(&transform, g.seg.p)
+				q := mul(&transform, g.seg.q)
 				z.drawQuad(z.last, p, q)
 				z.last = q
 			}

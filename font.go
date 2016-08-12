@@ -22,18 +22,34 @@ import (
 	"golang.org/x/image/math/f32"
 )
 
+// Flags for simple (non-compound) glyphs.
 const (
-	flagOnCurve      = 1 << 0
-	flagXShortVector = 1 << 1
-	flagYShortVector = 1 << 2
-	flagRepeat       = 1 << 3
+	flagOnCurve      = 1 << 0 // 0x0001
+	flagXShortVector = 1 << 1 // 0x0002
+	flagYShortVector = 1 << 2 // 0x0004
+	flagRepeat       = 1 << 3 // 0x0008
 
-	// The same flag bits (0x10 and 0x20) are overloaded to have two meanings,
-	// dependent on the value of the flag{X,Y}ShortVector bits.
-	flagPositiveXShortVector = 1 << 4
-	flagThisXIsSame          = 1 << 4
-	flagPositiveYShortVector = 1 << 5
-	flagThisYIsSame          = 1 << 5
+	// The same flag bits are overloaded to have two meanings, dependent on the
+	// value of the flag{X,Y}ShortVector bits.
+	flagPositiveXShortVector = 1 << 4 // 0x0010
+	flagThisXIsSame          = 1 << 4 // 0x0010
+	flagPositiveYShortVector = 1 << 5 // 0x0020
+	flagThisYIsSame          = 1 << 5 // 0x0020
+)
+
+// Flags for compound glyphs.
+const (
+	flagArg1And2AreWords   = 1 << 0  // 0x0001
+	flagArgsAreXYValues    = 1 << 1  // 0x0002
+	flagRoundXYToGrid      = 1 << 2  // 0x0004
+	flagWeHaveAScale       = 1 << 3  // 0x0008
+	flagUnused4            = 1 << 4  // 0x0010
+	flagMoreComponents     = 1 << 5  // 0x0020
+	flagWeHaveAnXAndYScale = 1 << 6  // 0x0040
+	flagWeHaveATwoByTwo    = 1 << 7  // 0x0080
+	flagWeHaveInstructions = 1 << 8  // 0x0100
+	flagUseMyMetrics       = 1 << 9  // 0x0200
+	flagOverlapCompound    = 1 << 10 // 0x0400
 )
 
 func i16(b []byte, i int) int16 {
@@ -84,8 +100,15 @@ type Font struct {
 	maxp maxp
 }
 
-func (f *Font) dumpGlyph(glyphID uint16, ppem float32) {
-	g := f.glyphIter(glyphID, ppem)
+func (f *Font) dumpGlyph(b glyphData, transform f32.Aff3) {
+	g := b.glyphIter()
+	if g.compoundGlyph() {
+		for g.nextSubGlyph() {
+			f.dumpGlyph(f.glyphData(g.subGlyphID), concat(&transform, &g.subTransform))
+		}
+		return
+	}
+
 	for g.nextContour() {
 		fmt.Println("---")
 		if false {
@@ -97,68 +120,86 @@ func (f *Font) dumpGlyph(glyphID uint16, ppem float32) {
 			// Include implicit points and transform.
 			for g.nextSegment() {
 				fmt.Printf("%d\t%v\t%v\n", g.seg.op,
-					mul(&g.transform, g.seg.p),
-					mul(&g.transform, g.seg.q),
+					mul(&transform, g.seg.p),
+					mul(&transform, g.seg.q),
 				)
 			}
 		}
 	}
 }
 
-// TODO: use the overall font's bbox from the head table, not the glyph's bbox,
-// and delete the glyphID arg.
-func (f *Font) glyphSize(glyphID uint16, ppem float32) (width, height int) {
-	b := f.glyphIter(glyphID, ppem).bbox
-	return b.Dx(), b.Dy()
+func (f *Font) scale(ppem float32) float32 {
+	return ppem / float32(f.head.unitsPerEm())
 }
 
-func readBbox(data []byte, scale float32) (bbox image.Rectangle, transform f32.Aff3) {
+func (f *Font) glyphData(glyphID uint16) glyphData {
+	if int(glyphID) >= f.maxp.numGlyphs() {
+		return nil
+	}
+	lo, hi := f.loca.glyfRange(glyphID, f.head.indexToLocFormat())
+	if lo >= hi || hi-lo < 10 || hi > uint32(len(f.glyf)) {
+		return nil
+	}
+	return glyphData(f.glyf[lo:hi])
+}
+
+type glyphData []byte
+
+func (b glyphData) glyphSizeAndTransform(scale float32) (width, height int, t f32.Aff3) {
+	if b == nil {
+		return 0, 0, f32.Aff3{}
+	}
 	s := float64(scale)
-	bbox.Min.X = int(math.Floor(+s * float64(i16(data, 2))))
-	bbox.Max.Y = int(math.Ceil(-s * float64(i16(data, 4))))
-	bbox.Max.X = int(math.Ceil(+s * float64(i16(data, 6))))
-	bbox.Min.Y = int(math.Floor(-s * float64(i16(data, 8))))
-	return bbox, f32.Aff3{
+	bbox := image.Rectangle{
+		Min: image.Point{
+			X: int(math.Floor(+s * float64(i16(b, 2)))),
+			Y: int(math.Floor(-s * float64(i16(b, 8)))),
+		},
+		Max: image.Point{
+			X: int(math.Ceil(+s * float64(i16(b, 6)))),
+			Y: int(math.Ceil(-s * float64(i16(b, 4)))),
+		},
+	}
+	return bbox.Dx(), bbox.Dy(), f32.Aff3{
 		+scale, 0, -float32(bbox.Min.X),
 		0, -scale, -float32(bbox.Min.Y),
 	}
 }
 
-func (f *Font) glyphIter(glyphID uint16, ppem float32) glyphIter {
-	if int(glyphID) >= f.maxp.numGlyphs() {
+func (b glyphData) glyphIter() glyphIter {
+	if b == nil {
 		return glyphIter{}
 	}
-	lo, hi := f.loca.glyfRange(glyphID, f.head.indexToLocFormat())
-	if lo >= hi || hi-lo < 10 || hi > uint32(len(f.glyf)) {
-		return glyphIter{}
+	nContours := int32(i16(b, 0))
+	if nContours < 0 {
+		if nContours != -1 {
+			// Negative values other than -1 are invalid.
+			return glyphIter{}
+		}
+		// We have a compound glyph.
+		return glyphIter{
+			data:      b,
+			endIndex:  initialIndex,
+			nContours: nContours,
+		}
 	}
-	data := f.glyf[lo:hi]
-	nContours := int32(i16(data, 0))
-	bbox, transform := readBbox(data, float32(ppem)/float32(f.head.unitsPerEm()))
+
+	// We have a simple glyph.
 	index := 10 + 2*int(nContours)
-	if index > len(f.glyf) {
+	if index > len(b) {
 		return glyphIter{}
 	}
 	// The +1 for nPoints is because the np index in the file format is
 	// inclusive, but Go's slice[:index] semantics are exclusive.
-	nPoints := 1 + int(u16(data, index-2))
-	switch {
-	case nContours >= 0:
-		// Non-negative means a simple glyph.
-		//
-		// Skip the hinting instructions.
-		if index+2 > len(f.glyf) {
-			return glyphIter{}
-		}
-		insnLen := int(u16(data, index))
-		index += 2 + insnLen
-		if index > len(f.glyf) {
-			return glyphIter{}
-		}
-	case nContours == -1:
-		// -1 means a compound glyph.
-	default:
-		// Negative values other than -1 are invalid.
+	nPoints := 1 + int(u16(b, index-2))
+
+	// Skip the hinting instructions.
+	if index+2 > len(b) {
+		return glyphIter{}
+	}
+	insnLen := int(u16(b, index))
+	index += 2 + insnLen
+	if index > len(b) {
 		return glyphIter{}
 	}
 
@@ -175,10 +216,10 @@ func (f *Font) glyphIter(glyphID uint16, ppem float32) glyphIter {
 
 		// TODO: bounds checking inside this block.
 		repeatCount := 1
-		flag := data[index]
+		flag := b[index]
 		index++
 		if flag&flagRepeat != 0 {
-			repeatCount += int(data[index])
+			repeatCount += int(b[index])
 			index++
 		}
 
@@ -201,14 +242,12 @@ func (f *Font) glyphIter(glyphID uint16, ppem float32) glyphIter {
 		i += repeatCount
 	}
 
-	if index+xDataLen+yDataLen > len(data) {
+	if index+xDataLen+yDataLen > len(b) {
 		return glyphIter{}
 	}
 	return glyphIter{
-		data:      data,
-		bbox:      bbox,
-		transform: transform,
-		endIndex:  initialEndIndex,
+		data:      b,
+		endIndex:  initialIndex,
 		flagIndex: flagIndex,
 		xIndex:    index,
 		yIndex:    index + xDataLen,
@@ -244,22 +283,22 @@ type maxp []byte
 
 func (b maxp) numGlyphs() int { return int(u16(b, 4)) }
 
-const initialEndIndex = 10
+const initialIndex = 10
 
 type glyphIter struct {
 	data []byte
 
 	// Various indices into the data slice.
 	//
-	// endIndex points to the uint16 that is the inclusive point index of the
-	// current contour's end.
+	// For simple glyphs, endIndex points to the uint16 that is the inclusive
+	// point index of the current contour's end.
+	//
+	// For compound glyphs, endIndex points to the next sub-glyph and the other
+	// xxxIndex fields are unused.
 	endIndex  int
 	flagIndex int
 	xIndex    int
 	yIndex    int
-
-	bbox      image.Rectangle
-	transform f32.Aff3
 
 	nContours int32 // -1 for compound glyphs.
 	c         int32
@@ -283,13 +322,15 @@ type glyphIter struct {
 	lastOffCurveValid  bool
 	closing            bool
 	allDone            bool
+
+	// Sub-glyphs.
+	subGlyphID   uint16
+	subTransform f32.Aff3
 }
 
+func (g *glyphIter) compoundGlyph() bool { return g.nContours < 0 }
+
 func (g *glyphIter) nextContour() (ok bool) {
-	if g.nContours == -1 {
-		println("TODO: compound glyphs")
-		return false
-	}
 	if g.c == g.nContours {
 		return false
 	}
@@ -434,4 +475,61 @@ func (g *glyphIter) nextSegment() (ok bool) {
 			}
 		}
 	}
+}
+
+func (g *glyphIter) nextSubGlyph() (ok bool) {
+	// TODO: bounds checking throughout this method.
+	if g.endIndex < 0 {
+		return false
+	}
+
+	i, data := g.endIndex, g.data
+	flags := u16(data, i+0)
+	if flags&flagArgsAreXYValues == 0 {
+		// TODO: handle this case, if it's ever used by real fonts.
+		g.endIndex = -1
+		return false
+	}
+	g.subGlyphID = u16(data, i+2)
+	i += 4
+
+	g.subTransform = f32.Aff3{
+		1, 0, 0,
+		0, 1, 0,
+	}
+	if flags&flagArg1And2AreWords != 0 {
+		g.subTransform[2] = float32(i16(data, i+0))
+		g.subTransform[5] = float32(i16(data, i+2))
+		i += 4
+	} else {
+		g.subTransform[2] = float32(int8(data[i+0]))
+		g.subTransform[5] = float32(int8(data[i+1]))
+		i += 2
+	}
+
+	if flags&flagWeHaveAScale != 0 {
+		t := float32(i16(data, i+0))
+		g.subTransform[0] = t
+		g.subTransform[4] = t
+		i += 2
+	} else if flags&flagWeHaveAnXAndYScale != 0 {
+		g.subTransform[0] = float32(i16(data, i+0))
+		g.subTransform[4] = float32(i16(data, i+2))
+		i += 4
+	} else if flags&flagWeHaveATwoByTwo != 0 {
+		// TODO: check that it's 0,1,3,4 and not 0,3,1,4.
+		g.subTransform[0] = float32(i16(data, i+0))
+		g.subTransform[1] = float32(i16(data, i+2))
+		g.subTransform[3] = float32(i16(data, i+4))
+		g.subTransform[4] = float32(i16(data, i+6))
+		i += 8
+	}
+
+	if flags&flagMoreComponents == 0 {
+		// The remainder of the glyf data are hinting instructions, which we skip.
+		g.endIndex = -1
+	} else {
+		g.endIndex = i
+	}
+	return true
 }

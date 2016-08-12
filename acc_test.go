@@ -115,7 +115,10 @@ func benchRasterize(b *testing.B, ppem float32) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	z := newRasterizer(f.glyphSize(uint16(*glyphIDFlag), ppem))
+
+	data := f.glyphData(uint16(*glyphIDFlag))
+	dx, dy, transform := data.glyphSizeAndTransform(f.scale(ppem))
+	z := newRasterizer(dx, dy)
 	dst := image.NewAlpha(z.Bounds())
 	dst.Pix = make([]byte, len(dst.Pix)+accumulatorSlop)
 
@@ -126,7 +129,8 @@ func benchRasterize(b *testing.B, ppem float32) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		z.rasterize(f, uint16(*glyphIDFlag), ppem)
+		z.reset()
+		z.rasterize(f, data, transform)
 		acc(dst.Pix, z.a[:z.w*z.h])
 	}
 }
