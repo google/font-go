@@ -55,14 +55,16 @@ TEXT ·accumulateSIMD(SB), NOSPLIT, $8-48
 	CMPQ BX, CX
 	JLT  end
 
-	// TODO: clean up the tail if len(src)%4 != 0.
+	// CX = len(src) &^ 3
+	// DX = len(src)
+	MOVQ CX, DX
 	ANDQ $-4, CX
 
 	// Set MXCSR bits 13 and 14, so that the CVTPS2PL below is "Round To Zero".
 	STMXCSR mxcsr-8(SP)
-	MOVL    mxcsr-8(SP), DX
-	ORL     $0x6000, DX
-	MOVL    DX, mxcsr-8(SP)
+	MOVL    mxcsr-8(SP), AX
+	ORL     $0x6000, AX
+	MOVL    AX, mxcsr-8(SP)
 	LDMXCSR mxcsr-8(SP)
 
 	// twoFiftyFives := XMM(0x437f0000 repeated four times) // 255 as a float32.
@@ -79,14 +81,14 @@ TEXT ·accumulateSIMD(SB), NOSPLIT, $8-48
 	// i := 0
 	MOVQ $0, AX
 
-loop:
-	// for i < len(src)
+loop4:
+	// for i < (len(src) &^ 3)
 	CMPQ AX, CX
-	JAE  end
+	JAE  loop1
 
 	// x = XMM(s0, s1, s2, s3)
 	//
-	// Where s0 is src[0], s1 is src[1], etc.
+	// Where s0 is src[i+0], s1 is src[i+1], etc.
 	MOVOU (SI), X1
 
 	// scratch = XMM(0, s0, s1, s2)
@@ -130,7 +132,41 @@ loop:
 	ADDQ $4, AX
 	ADDQ $4, DI
 	ADDQ $16, SI
-	JMP  loop
+	JMP  loop4
+
+loop1:
+	// for i < len(src)
+	CMPQ AX, DX
+	JAE  end
+
+	// x = src[i] + offset
+	MOVL  (SI), X1
+	ADDPS X7, X1
+
+	// y = x & signMask
+	// y = min(y, ones)
+	// y = mul(y, twoFiftyFives)
+	MOVOU X5, X2
+	ANDPS X1, X2
+	MINPS X4, X2
+	MULPS X3, X2
+
+	// z = float32ToInt32(y)
+	// dst[0] = uint8(z)
+	CVTPS2PL X2, X2
+	MOVL     X2, BX
+	MOVB     BX, (DI)
+
+	// offset = x
+	MOVOU X1, X7
+
+	// i += 1
+	// dst = dst[1:]
+	// src = src[1:]
+	ADDQ $1, AX
+	ADDQ $1, DI
+	ADDQ $4, SI
+	JMP  loop1
 
 end:
 	RET

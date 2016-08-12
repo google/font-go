@@ -50,63 +50,52 @@ func TestAccumulateSIMDShortDst(t *testing.T) {
 	}
 }
 
-func TestAccumulate(t *testing.T)             { testAccumulate(t, false) }
-func TestAccumulateSIMD(t *testing.T)         { testAccumulate(t, true) }
+func TestAccumulate(t *testing.T)            { testAccumulate(t, sequence, sequenceAcc, false) }
+func TestAccumulateSIMD(t *testing.T)        { testAccumulate(t, sequence, sequenceAcc, true) }
+func TestAccumulateRobotoG(t *testing.T)     { testAccumulate(t, robotoG16, robotoG16Acc, false) }
+func TestAccumulateSIMDRobotoG(t *testing.T) { testAccumulate(t, robotoG16, robotoG16Acc, true) }
+
 func BenchmarkAccumulate16(b *testing.B)      { benchAccumulate(b, robotoG16, false) }
 func BenchmarkAccumulate16SIMD(b *testing.B)  { benchAccumulate(b, robotoG16, true) }
 func BenchmarkAccumulate100(b *testing.B)     { benchAccumulate(b, robotoG100, false) }
 func BenchmarkAccumulate100SIMD(b *testing.B) { benchAccumulate(b, robotoG100, true) }
 
-func testAccumulate(t *testing.T, simd bool) {
+func testAccumulate(t *testing.T, src []float32, want []byte, simd bool) {
 	if simd && !haveAccumulateSIMD {
 		t.Skip("No accumulateSIMD implemention")
 	}
 
-	src := make([]float32, len(robotoG16)+accumulatorSlop)
-	copy(src, robotoG16)
+	for _, n := range []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+		13, 14, 15, 16, 17, 41, 58, 79, 96, len(src)} {
 
-	want := []uint8{
-		0x00, 0x00, 0x27, 0x7b, 0x86, 0x3f, 0x33, 0x66,
-		0x00, 0x3e, 0xf2, 0xdd, 0xad, 0xe4, 0xd8, 0xe3,
-		0x00, 0xcc, 0xcb, 0x0a, 0x00, 0x0e, 0xd1, 0xe3,
-		0x18, 0xfe, 0x61, 0x00, 0x00, 0x00, 0x8f, 0xe3,
-		0x36, 0xfe, 0x3e, 0x00, 0x00, 0x00, 0x8f, 0xe3,
-		0x26, 0xfe, 0x46, 0x00, 0x00, 0x00, 0x8f, 0xe3,
-		0x07, 0xf4, 0x83, 0x00, 0x00, 0x00, 0x9a, 0xe3,
-		0x00, 0x8d, 0xf3, 0x59, 0x21, 0x69, 0xfb, 0xe3,
-		0x00, 0x08, 0xa3, 0xfb, 0xfe, 0xca, 0xb2, 0xe2,
-		0x00, 0x00, 0x00, 0x0b, 0x13, 0x00, 0xa9, 0xc5,
-		0x00, 0x7a, 0x85, 0x09, 0x00, 0x3e, 0xf7, 0x79,
-		0x00, 0x2b, 0xd9, 0xf9, 0xe7, 0xfe, 0xa3, 0x05,
-		0x00, 0x00, 0x01, 0x26, 0x47, 0x20, 0x00, 0x00,
-	}
+		if n > len(src) {
+			continue
+		}
+		got := make([]byte, n)
+		if simd {
+			accumulateSIMD(got, src[:n])
+		} else {
+			accumulate(got, src[:n])
+		}
 
-	got := make([]byte, len(src))
-	if simd {
-		accumulateSIMD(got, src)
-	} else {
-		accumulate(got, src)
-	}
-	got = got[:len(want)]
-
-	for i := range got {
-		g := got[i]
-		w := want[i]
-		if g != w {
-			t.Fatalf("i=%d: got %#02x, want %#02x", i, g, w)
+	loop:
+		for i := range got {
+			g := got[i]
+			w := want[i]
+			if g != w {
+				t.Errorf("n=%d, i=%d: got %#02x, want %#02x", n, i, g, w)
+				break loop
+			}
 		}
 	}
 }
 
-func benchAccumulate(b *testing.B, rawSrc []float32, simd bool) {
+func benchAccumulate(b *testing.B, src []float32, simd bool) {
 	if simd && !haveAccumulateSIMD {
 		b.Skip("No accumulateSIMD implemention")
 	}
 
-	src := make([]float32, len(rawSrc)+accumulatorSlop)
-	copy(src, rawSrc)
 	dst := make([]byte, len(src))
-
 	acc := accumulate
 	if simd {
 		acc = accumulateSIMD
@@ -135,7 +124,6 @@ func benchRasterize(b *testing.B, ppem float32) {
 	dx, dy, transform := data.glyphSizeAndTransform(f.scale(ppem))
 	z := newRasterizer(dx, dy)
 	dst := image.NewAlpha(z.Bounds())
-	dst.Pix = make([]byte, len(dst.Pix)+accumulatorSlop)
 
 	acc := accumulate
 	if haveAccumulateSIMD {
@@ -146,8 +134,54 @@ func benchRasterize(b *testing.B, ppem float32) {
 	for i := 0; i < b.N; i++ {
 		z.reset()
 		z.rasterize(f, data, transform)
-		acc(dst.Pix, z.a[:z.w*z.h])
+		acc(dst.Pix, z.a)
 	}
+}
+
+// sequenceAcc is the accumulation of sequence.
+var sequenceAcc = []uint8{
+	0x1f,
+	0x5f,
+	0x1f,
+	0x3f,
+	0x5f,
+	0x5f,
+	0x9f,
+	0xff,
+	0xdf,
+	0x00,
+	0x3f,
+}
+
+var sequence = []float32{
+	+0.125, // Running sum: +0.125
+	-0.500, // Running sum: -0.375
+	+0.250, // Running sum: -0.125
+	+0.375, // Running sum: +0.250
+	+0.125, // Running sum: +0.375
+	+0.000, // Running sum: +0.375
+	-1.000, // Running sum: -0.625
+	-0.500, // Running sum: -1.125
+	+0.250, // Running sum: -0.875
+	+0.875, // Running sum: +0.000
+	+0.250, // Running sum: +0.250
+}
+
+// robotoG16Acc is the accumulation of roboto16.
+var robotoG16Acc = []uint8{
+	0x00, 0x00, 0x27, 0x7b, 0x86, 0x3f, 0x33, 0x66,
+	0x00, 0x3e, 0xf2, 0xdd, 0xad, 0xe4, 0xd8, 0xe3,
+	0x00, 0xcc, 0xcb, 0x0a, 0x00, 0x0e, 0xd1, 0xe3,
+	0x18, 0xfe, 0x61, 0x00, 0x00, 0x00, 0x8f, 0xe3,
+	0x36, 0xfe, 0x3e, 0x00, 0x00, 0x00, 0x8f, 0xe3,
+	0x26, 0xfe, 0x46, 0x00, 0x00, 0x00, 0x8f, 0xe3,
+	0x07, 0xf4, 0x83, 0x00, 0x00, 0x00, 0x9a, 0xe3,
+	0x00, 0x8d, 0xf3, 0x59, 0x21, 0x69, 0xfb, 0xe3,
+	0x00, 0x08, 0xa3, 0xfb, 0xfe, 0xca, 0xb2, 0xe2,
+	0x00, 0x00, 0x00, 0x0b, 0x13, 0x00, 0xa9, 0xc5,
+	0x00, 0x7a, 0x85, 0x09, 0x00, 0x3e, 0xf7, 0x79,
+	0x00, 0x2b, 0xd9, 0xf9, 0xe7, 0xfe, 0xa3, 0x05,
+	0x00, 0x00, 0x01, 0x26, 0x47, 0x20, 0x00, 0x00,
 }
 
 // robotoG16 is the to-be-accumulated 'g' from Roboto-Regular.ttf at 16 ppem.

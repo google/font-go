@@ -49,10 +49,6 @@ func concat(a, b *f32.Aff3) f32.Aff3 {
 	}
 }
 
-// The SIMD code reads 4 float32s and writes 4 bytes at a time, which can
-// overrun buffers by up to 3 elements.
-const accumulatorSlop = 3
-
 type op uint8
 
 const (
@@ -100,7 +96,7 @@ type rasterizer struct {
 
 func newRasterizer(w, h int) *rasterizer {
 	return &rasterizer{
-		a: make([]float32, w*h+accumulatorSlop),
+		a: make([]float32, w*h),
 		w: w,
 		h: h,
 	}

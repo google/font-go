@@ -56,11 +56,10 @@ func main() {
 	z := newRasterizer(dx, dy)
 	z.rasterize(f, data, transform)
 	dst := image.NewAlpha(z.Bounds())
-	dst.Pix = make([]byte, len(dst.Pix)+accumulatorSlop)
 	if haveAccumulateSIMD {
-		accumulateSIMD(dst.Pix, z.a[:z.w*z.h])
+		accumulateSIMD(dst.Pix, z.a)
 	} else {
-		accumulate(dst.Pix, z.a[:z.w*z.h])
+		accumulate(dst.Pix, z.a)
 	}
 
 	out, err := os.Create("out.png")
