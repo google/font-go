@@ -52,15 +52,15 @@ const (
 	flagOverlapCompound    = 1 << 10 // 0x0400
 )
 
-func i16(b []byte, i int) int16 {
+func i16(b []byte, i int32) int16 {
 	return int16(uint16(b[i+0])<<8 | uint16(b[i+1])<<0)
 }
 
-func u16(b []byte, i int) uint16 {
+func u16(b []byte, i int32) uint16 {
 	return uint16(b[i+0])<<8 | uint16(b[i+1])<<0
 }
 
-func u32(b []byte, i int) uint32 {
+func u32(b []byte, i int32) uint32 {
 	return uint32(b[i+0])<<24 | uint32(b[i+1])<<16 | uint32(b[i+2])<<8 | uint32(b[i+3])<<0
 }
 
@@ -109,7 +109,10 @@ func (f *Font) glyphData(glyphID uint16) glyphData {
 		return nil
 	}
 	lo, hi := f.loca.glyfRange(glyphID, f.head.indexToLocFormat())
-	if lo >= hi || hi-lo < 10 || hi > uint32(len(f.glyf)) {
+	if lo >= hi || hi > uint32(len(f.glyf)) {
+		return nil
+	}
+	if n := hi - lo; n < minGlyphDataLen || maxGlyphDataLen < n {
 		return nil
 	}
 	return glyphData(f.glyf[lo:hi])
@@ -127,11 +130,11 @@ type loca []byte
 func (b loca) glyfRange(glyphID uint16, indexToLocFormat int) (lo, hi uint32) {
 	// TODO: bounds checking throughout this method.
 	if indexToLocFormat == 0 {
-		lo = 2 * uint32(u16(b, 2*int(glyphID)+0))
-		hi = 2 * uint32(u16(b, 2*int(glyphID)+2))
+		lo = 2 * uint32(u16(b, 2*int32(glyphID)+0))
+		hi = 2 * uint32(u16(b, 2*int32(glyphID)+2))
 	} else {
-		lo = u32(b, 4*int(glyphID)+0)
-		hi = u32(b, 4*int(glyphID)+4)
+		lo = u32(b, 4*int32(glyphID)+0)
+		hi = u32(b, 4*int32(glyphID)+4)
 	}
 	return lo, hi
 }
@@ -182,19 +185,19 @@ func (b glyphData) glyphIter() glyphIter {
 	}
 
 	// We have a simple glyph.
-	index := 10 + 2*int(nContours)
+	index := initialIndex + 2*int(nContours)
 	if index > len(b) {
 		return glyphIter{}
 	}
 	// The +1 for nPoints is because the np index in the file format is
 	// inclusive, but Go's slice[:index] semantics are exclusive.
-	nPoints := 1 + int(u16(b, index-2))
+	nPoints := 1 + int(u16(b, int32(index-2)))
 
 	// Skip the hinting instructions.
 	if index+2 > len(b) {
 		return glyphIter{}
 	}
-	insnLen := int(u16(b, index))
+	insnLen := int(u16(b, int32(index)))
 	index += 2 + insnLen
 	if index > len(b) {
 		return glyphIter{}
@@ -244,10 +247,10 @@ func (b glyphData) glyphIter() glyphIter {
 	}
 	return glyphIter{
 		data:      b,
-		endIndex:  initialIndex,
-		flagIndex: flagIndex,
-		xIndex:    index,
-		yIndex:    index + xDataLen,
+		endIndex:  int32(initialIndex),
+		flagIndex: int32(flagIndex),
+		xIndex:    int32(index),
+		yIndex:    int32(index + xDataLen),
 		nContours: nContours,
 		// The -1 is because the contour-end index in the file format is
 		// inclusive, but Go's slice[:index] semantics are exclusive.
@@ -255,7 +258,13 @@ func (b glyphData) glyphIter() glyphIter {
 	}
 }
 
-const initialIndex = 10
+const (
+	initialIndex    = 10
+	minGlyphDataLen = 10
+	// maxGlyphDataLen isn't part of the spec. It is a sanity check. A slice of
+	// glyph data is typically hundreds of bytes, including hinting bytecode.
+	maxGlyphDataLen = 1024 * 1024
+)
 
 type glyphIter struct {
 	data []byte
@@ -267,10 +276,10 @@ type glyphIter struct {
 	//
 	// For compound glyphs, endIndex points to the next sub-glyph and the other
 	// xxxIndex fields are unused.
-	endIndex  int
-	flagIndex int
-	xIndex    int
-	yIndex    int
+	endIndex  int32
+	flagIndex int32
+	xIndex    int32
+	yIndex    int32
 
 	nContours int32 // -1 for compound glyphs.
 	c         int32
