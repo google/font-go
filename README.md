@@ -14,8 +14,8 @@ and viewing the resultant out.png file.
 To run the benchmarks with and without SIMD assembler:
 
 ```
-$ go test -test.bench=.
-$ go test -test.bench=. -tags=noasm
+go test -test.bench=.
+go test -test.bench=. -tags=noasm
 ```
 
 ## Authors
