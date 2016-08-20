@@ -3,10 +3,13 @@
 This is a port of https://github.com/google/font-rs to the Go programming
 language.
 
+There are two implementations, using fixed and floating point math.
+
 You can visually inspect rasterization by running:
 
 ```
-go build && ./font-go
+cd floating
+go build && ./floating
 ```
 
 and viewing the resultant out.png file.
