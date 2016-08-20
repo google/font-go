@@ -50,10 +50,10 @@ func TestAccumulateSIMDShortDst(t *testing.T) {
 	}
 }
 
-func TestAccumulate(t *testing.T)            { testAccumulate(t, sequence, sequenceAcc, false) }
-func TestAccumulateSIMD(t *testing.T)        { testAccumulate(t, sequence, sequenceAcc, true) }
-func TestAccumulateRobotoG(t *testing.T)     { testAccumulate(t, robotoG16, robotoG16Acc, false) }
-func TestAccumulateSIMDRobotoG(t *testing.T) { testAccumulate(t, robotoG16, robotoG16Acc, true) }
+func TestAccumulate(t *testing.T)              { testAccumulate(t, sequence, sequenceAcc, false) }
+func TestAccumulateSIMD(t *testing.T)          { testAccumulate(t, sequence, sequenceAcc, true) }
+func TestAccumulateRobotoG16(t *testing.T)     { testAccumulate(t, robotoG16, robotoG16Acc, false) }
+func TestAccumulateSIMDRobotoG16(t *testing.T) { testAccumulate(t, robotoG16, robotoG16Acc, true) }
 
 func BenchmarkAccumulate16(b *testing.B)      { benchAccumulate(b, robotoG16, false) }
 func BenchmarkAccumulateSIMD16(b *testing.B)  { benchAccumulate(b, robotoG16, true) }
