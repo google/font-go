@@ -213,7 +213,7 @@ func (z *rasterizer) drawLine(p, q point) {
 			x1f := x1 - x1Ceil + 1
 			am := 0.5 * s * x1f * x1f
 			if i := uint(x0i); i < uint(len(buf)) {
-				buf[x0i] += d * a0
+				buf[i] += d * a0
 			} else if debugOutOfBounds {
 				println("out of bounds #2")
 			}
