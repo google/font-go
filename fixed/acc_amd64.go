@@ -18,7 +18,9 @@
 
 package main
 
-const haveAccumulateSIMD = true
+var haveAccumulateSIMD = haveSSE4_1()
+
+func haveSSE4_1() bool
 
 //go:noescape
-func accumulateSIMD(dst []uint8, src []float32)
+func accumulateSIMD(dst []uint8, src []int20_12)

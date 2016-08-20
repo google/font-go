@@ -19,24 +19,22 @@ import (
 	"math"
 
 	"golang.org/x/image/math/f32"
+	"golang.org/x/image/math/fixed"
 )
 
-func max(x, y float32) float32 {
+func max(x, y fixed.Int26_6) fixed.Int26_6 {
 	if x > y {
 		return x
 	}
 	return y
 }
 
-func min(x, y float32) float32 {
+func min(x, y fixed.Int26_6) fixed.Int26_6 {
 	if x < y {
 		return x
 	}
 	return y
 }
-
-func floor(x float32) int { return int(math.Floor(float64(x))) }
-func ceil(x float32) int  { return int(math.Ceil(float64(x))) }
 
 func concat(a, b *f32.Aff3) f32.Aff3 {
 	return f32.Aff3{
@@ -87,8 +85,11 @@ type segment struct {
 	p, q point
 }
 
+// int20_12 is a signed 20.12 fixed-point number.
+type int20_12 int32
+
 type rasterizer struct {
-	a    []float32
+	a    []int20_12
 	last point
 	w    int
 	h    int
@@ -96,7 +97,7 @@ type rasterizer struct {
 
 func newRasterizer(w, h int) *rasterizer {
 	return &rasterizer{
-		a: make([]float32, w*h),
+		a: make([]int20_12, w*h),
 		w: w,
 		h: h,
 	}
@@ -141,99 +142,103 @@ func (z *rasterizer) rasterize(f *Font, a glyphData, transform f32.Aff3) {
 	}
 }
 
-func accumulate(dst []uint8, src []float32) {
+func accumulate(dst []uint8, src []int20_12) {
 	// TODO: pix adjustment if dst.Bounds() != z.Bounds()?
-	acc := float32(0)
+	acc := int20_12(0)
 	for i, v := range src {
 		acc += v
 		a := acc
 		if a < 0 {
 			a = -a
 		}
-		if a > 1 {
-			a = 1
+		if a > 0xfff {
+			a = 0xfff
 		}
-		dst[i] = uint8(255 * a)
+		dst[i] = uint8(a >> 4)
 	}
 }
 
 const debugOutOfBounds = false
 
 func (z *rasterizer) drawLine(p, q point) {
-	if p.y == q.y {
+	px := fixed.Int26_6(p.x * (1 << 6))
+	py := fixed.Int26_6(p.y * (1 << 6))
+	qx := fixed.Int26_6(q.x * (1 << 6))
+	qy := fixed.Int26_6(q.y * (1 << 6))
+	if py == qy {
 		return
 	}
-	dir := float32(1)
-	if p.y > q.y {
-		dir, p, q = -1, q, p
+	dir := fixed.Int26_6(1)
+	if py > qy {
+		dir, px, py, qx, qy = -1, qx, qy, px, py
 	}
-	dxdy := (q.x - p.x) / (q.y - p.y)
+	deltax, deltay := qx - px, qy - py
 
-	x := p.x
-	if p.y < 0 {
-		x -= p.y * dxdy
+	x := px
+	if py < 0 {
+		x -= py * deltax / deltay
 	}
 	// TODO: floor instead of round to zero? Make this max(0, etc)? int instead of uint is more Go-like.
-	y := int(p.y)
-	yMax := ceil(q.y)
-	if yMax > z.h {
-		yMax = z.h
+	y := int32(py+0x00) >> 6
+	yMax := int32(qy+0x3f) >> 6
+	if yMax > int32(z.h) {
+		yMax = int32(z.h)
 	}
 
 	for ; y < yMax; y++ {
-		buf := z.a[y*z.w:]
-		dy := min(float32(y+1), q.y) - max(float32(y), p.y)
-		xNext := x + dy*dxdy
+		buf := z.a[y*int32(z.w):]
+		dy := min(fixed.Int26_6(y+1)<<6, qy) - max(fixed.Int26_6(y)<<6, py)
+		xNext := x + dy*deltax/deltay
 		d := dy * dir
 		x0, x1 := x, xNext
 		if x > xNext {
 			x0, x1 = x1, x0
 		}
-		x0i := floor(x0)
-		x0Floor := float32(x0i)
-		x1i := ceil(x1)
-		x1Ceil := float32(x1i)
+		x0i := int32(x0+0x00) >> 6
+		x0Floor := fixed.Int26_6(x0i) << 6
+		x1i := int32(x1+0x3f) >> 6
+		x1Ceil := fixed.Int26_6(x1i) << 6
 
 		if x1i <= x0i+1 {
-			xmf := 0.5*(x+xNext) - x0Floor
+			xmf := (x+xNext)>>1 - x0Floor
 			if i := uint(x0i + 0); i < uint(len(buf)) {
-				buf[i] += d - d*xmf
+				buf[i] += int20_12(d * (1<<6 - xmf))
 			} else if debugOutOfBounds {
 				println("out of bounds #0")
 			}
 			if i := uint(x0i + 1); i < uint(len(buf)) {
-				buf[i] += d * xmf
+				buf[i] += int20_12(d * xmf)
 			} else if debugOutOfBounds {
 				println("out of bounds #1")
 			}
 		} else {
-			s := 1 / (x1 - x0)
+			oneOverS := x1 - x0
 			x0f := x0 - x0Floor
-			oneMinusX0f := 1 - x0f
-			a0 := 0.5 * s * oneMinusX0f * oneMinusX0f
-			x1f := x1 - x1Ceil + 1
-			am := 0.5 * s * x1f * x1f
+			oneMinusX0f := 1<<6 - x0f
+			a0 := ((oneMinusX0f * oneMinusX0f) >> 1) / oneOverS
+			x1f := x1 - x1Ceil + 1<<6
+			am := ((x1f * x1f) >> 1) / oneOverS
 
 			if i := uint(x0i); i < uint(len(buf)) {
-				buf[i] += d * a0
+				buf[i] += int20_12(d * a0)
 			} else if debugOutOfBounds {
 				println("out of bounds #2")
 			}
 
 			if x1i == x0i+2 {
 				if i := uint(x0i + 1); i < uint(len(buf)) {
-					buf[i] += d * (1 - a0 - am)
+					buf[i] += int20_12(d * (1<<6 - a0 - am))
 				} else if debugOutOfBounds {
 					println("out of bounds #3")
 				}
 			} else {
-				a1 := s * (1.5 - x0f)
+				a1 := ((1<<6 + 1<<5 - x0f) << 6) / oneOverS
 				if i := uint(x0i + 1); i < uint(len(buf)) {
-					buf[i] += d * (a1 - a0)
+					buf[i] += int20_12(d * (a1 - a0))
 				} else if debugOutOfBounds {
 					println("out of bounds #4")
 				}
-				dTimesS := d * s
+				dTimesS := int20_12((d << 12) / oneOverS)
 				for xi := x0i + 2; xi < x1i-1; xi++ {
 					if i := uint(xi); i < uint(len(buf)) {
 						buf[i] += dTimesS
@@ -241,16 +246,16 @@ func (z *rasterizer) drawLine(p, q point) {
 						println("out of bounds #5")
 					}
 				}
-				a2 := a1 + s*float32(x1i-x0i-3)
+				a2 := a1 + (fixed.Int26_6(x1i-x0i-3)<<12)/oneOverS
 				if i := uint(x1i - 1); i < uint(len(buf)) {
-					buf[i] += d * (1 - a2 - am)
+					buf[i] += int20_12(d * (1<<6 - a2 - am))
 				} else if debugOutOfBounds {
 					println("out of bounds #6")
 				}
 			}
 
 			if i := uint(x1i); i < uint(len(buf)) {
-				buf[i] += d * am
+				buf[i] += int20_12(d * am)
 			} else if debugOutOfBounds {
 				println("out of bounds #7")
 			}
