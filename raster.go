@@ -179,10 +179,11 @@ func (z *rasterizer) drawLine(p, q point) {
 	if yMax > z.h {
 		yMax = z.h
 	}
+
 	for ; y < yMax; y++ {
 		buf := z.a[y*z.w:]
 		dy := min(float32(y+1), q.y) - max(float32(y), p.y)
-		xNext := x + dxdy*dy
+		xNext := x + dy*dxdy
 		d := dy * dir
 		x0, x1 := x, xNext
 		if x > xNext {
@@ -212,11 +213,13 @@ func (z *rasterizer) drawLine(p, q point) {
 			a0 := 0.5 * s * oneMinusX0f * oneMinusX0f
 			x1f := x1 - x1Ceil + 1
 			am := 0.5 * s * x1f * x1f
+
 			if i := uint(x0i); i < uint(len(buf)) {
 				buf[i] += d * a0
 			} else if debugOutOfBounds {
 				println("out of bounds #2")
 			}
+
 			if x1i == x0i+2 {
 				if i := uint(x0i + 1); i < uint(len(buf)) {
 					buf[i] += d * (1 - a0 - am)
@@ -230,9 +233,10 @@ func (z *rasterizer) drawLine(p, q point) {
 				} else if debugOutOfBounds {
 					println("out of bounds #4")
 				}
+				dTimesS := d * s
 				for xi := x0i + 2; xi < x1i-1; xi++ {
 					if i := uint(xi); i < uint(len(buf)) {
-						buf[i] += d * s
+						buf[i] += dTimesS
 					} else if debugOutOfBounds {
 						println("out of bounds #5")
 					}
@@ -244,6 +248,7 @@ func (z *rasterizer) drawLine(p, q point) {
 					println("out of bounds #6")
 				}
 			}
+
 			if i := uint(x1i); i < uint(len(buf)) {
 				buf[i] += d * am
 			} else if debugOutOfBounds {
