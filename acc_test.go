@@ -56,9 +56,9 @@ func TestAccumulateRobotoG(t *testing.T)     { testAccumulate(t, robotoG16, robo
 func TestAccumulateSIMDRobotoG(t *testing.T) { testAccumulate(t, robotoG16, robotoG16Acc, true) }
 
 func BenchmarkAccumulate16(b *testing.B)      { benchAccumulate(b, robotoG16, false) }
-func BenchmarkAccumulate16SIMD(b *testing.B)  { benchAccumulate(b, robotoG16, true) }
+func BenchmarkAccumulateSIMD16(b *testing.B)  { benchAccumulate(b, robotoG16, true) }
 func BenchmarkAccumulate100(b *testing.B)     { benchAccumulate(b, robotoG100, false) }
-func BenchmarkAccumulate100SIMD(b *testing.B) { benchAccumulate(b, robotoG100, true) }
+func BenchmarkAccumulateSIMD100(b *testing.B) { benchAccumulate(b, robotoG100, true) }
 
 func testAccumulate(t *testing.T, src []float32, want []byte, simd bool) {
 	if simd && !haveAccumulateSIMD {
@@ -108,7 +108,11 @@ func benchAccumulate(b *testing.B, src []float32, simd bool) {
 }
 
 func BenchmarkRasterize16(b *testing.B)  { benchRasterize(b, 16) }
+func BenchmarkRasterize32(b *testing.B)  { benchRasterize(b, 32) }
+func BenchmarkRasterize64(b *testing.B)  { benchRasterize(b, 64) }
 func BenchmarkRasterize100(b *testing.B) { benchRasterize(b, 100) }
+func BenchmarkRasterize150(b *testing.B) { benchRasterize(b, 150) }
+func BenchmarkRasterize200(b *testing.B) { benchRasterize(b, 200) }
 
 func benchRasterize(b *testing.B, ppem float32) {
 	fontData, err := ioutil.ReadFile(*fontFlag)
