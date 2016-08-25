@@ -19,22 +19,44 @@ import (
 	"math"
 
 	"golang.org/x/image/math/f32"
-	"golang.org/x/image/math/fixed"
 )
 
-func max(x, y fixed.Int26_6) fixed.Int26_6 {
+const (
+	// ϕ is the number of binary digits after the fixed point.
+	//
+	// For example, if ϕ == 10 (and int1ϕ is based on the int32 type) then we
+	// are using 22.10 fixed point math.
+	ϕ = 6
+
+	one          = 1 << ϕ
+	oneAndAHalf  = 1<<ϕ + 1<<(ϕ-1)
+	oneMinusIota = 1<<ϕ - 1 // Used for rounding up.
+)
+
+// int2ϕ is a signed fixed-point number with 2*ϕ binary digits after the fixed
+// point.
+type int2ϕ int32
+
+// int1ϕ is a signed fixed-point number with 1*ϕ binary digits after the fixed
+// point.
+type int1ϕ int32
+
+func max(x, y int1ϕ) int1ϕ {
 	if x > y {
 		return x
 	}
 	return y
 }
 
-func min(x, y fixed.Int26_6) fixed.Int26_6 {
+func min(x, y int1ϕ) int1ϕ {
 	if x < y {
 		return x
 	}
 	return y
 }
+
+func floor(x int1ϕ) int32 { return int32(x >> ϕ) }
+func ceil(x int1ϕ) int32  { return int32((x + oneMinusIota) >> ϕ) }
 
 func concat(a, b *f32.Aff3) f32.Aff3 {
 	return f32.Aff3{
@@ -85,11 +107,8 @@ type segment struct {
 	p, q point
 }
 
-// int20_12 is a signed 20.12 fixed-point number.
-type int20_12 int32
-
 type rasterizer struct {
-	a    []int20_12
+	a    []int2ϕ
 	last point
 	w    int
 	h    int
@@ -97,7 +116,7 @@ type rasterizer struct {
 
 func newRasterizer(w, h int) *rasterizer {
 	return &rasterizer{
-		a: make([]int20_12, w*h),
+		a: make([]int2ϕ, w*h),
 		w: w,
 		h: h,
 	}
@@ -142,103 +161,103 @@ func (z *rasterizer) rasterize(f *Font, a glyphData, transform f32.Aff3) {
 	}
 }
 
-func accumulate(dst []uint8, src []int20_12) {
+func accumulate(dst []uint8, src []int2ϕ) {
 	// TODO: pix adjustment if dst.Bounds() != z.Bounds()?
-	acc := int20_12(0)
+	acc := int2ϕ(0)
 	for i, v := range src {
 		acc += v
 		a := acc
 		if a < 0 {
 			a = -a
 		}
-		if a > 0xfff {
-			a = 0xfff
+		a >>= 2*ϕ - 8
+		if a > 0xff {
+			a = 0xff
 		}
-		dst[i] = uint8(a >> 4)
+		dst[i] = uint8(a)
 	}
 }
 
 const debugOutOfBounds = false
 
 func (z *rasterizer) drawLine(p, q point) {
-	px := fixed.Int26_6(p.x * (1 << 6))
-	py := fixed.Int26_6(p.y * (1 << 6))
-	qx := fixed.Int26_6(q.x * (1 << 6))
-	qy := fixed.Int26_6(q.y * (1 << 6))
+	px := int1ϕ(p.x * one)
+	py := int1ϕ(p.y * one)
+	qx := int1ϕ(q.x * one)
+	qy := int1ϕ(q.y * one)
 	if py == qy {
 		return
 	}
-	dir := fixed.Int26_6(1)
+	dir := int1ϕ(1)
 	if py > qy {
 		dir, px, py, qx, qy = -1, qx, qy, px, py
 	}
-	deltax, deltay := qx - px, qy - py
+	deltax, deltay := qx-px, qy-py
 
 	x := px
 	if py < 0 {
 		x -= py * deltax / deltay
 	}
-	// TODO: floor instead of round to zero? Make this max(0, etc)? int instead of uint is more Go-like.
-	y := int32(py+0x00) >> 6
-	yMax := int32(qy+0x3f) >> 6
+	y := floor(py)
+	yMax := ceil(qy)
 	if yMax > int32(z.h) {
 		yMax = int32(z.h)
 	}
 
 	for ; y < yMax; y++ {
 		buf := z.a[y*int32(z.w):]
-		dy := min(fixed.Int26_6(y+1)<<6, qy) - max(fixed.Int26_6(y)<<6, py)
+		dy := min(int1ϕ(y+1)<<ϕ, qy) - max(int1ϕ(y)<<ϕ, py)
 		xNext := x + dy*deltax/deltay
 		d := dy * dir
 		x0, x1 := x, xNext
 		if x > xNext {
 			x0, x1 = x1, x0
 		}
-		x0i := int32(x0+0x00) >> 6
-		x0Floor := fixed.Int26_6(x0i) << 6
-		x1i := int32(x1+0x3f) >> 6
-		x1Ceil := fixed.Int26_6(x1i) << 6
+		x0i := floor(x0)
+		x0Floor := int1ϕ(x0i) << ϕ
+		x1i := ceil(x1)
+		x1Ceil := int1ϕ(x1i) << ϕ
 
 		if x1i <= x0i+1 {
 			xmf := (x+xNext)>>1 - x0Floor
 			if i := uint(x0i + 0); i < uint(len(buf)) {
-				buf[i] += int20_12(d * (1<<6 - xmf))
+				buf[i] += int2ϕ(d * (one - xmf))
 			} else if debugOutOfBounds {
 				println("out of bounds #0")
 			}
 			if i := uint(x0i + 1); i < uint(len(buf)) {
-				buf[i] += int20_12(d * xmf)
+				buf[i] += int2ϕ(d * xmf)
 			} else if debugOutOfBounds {
 				println("out of bounds #1")
 			}
 		} else {
 			oneOverS := x1 - x0
 			x0f := x0 - x0Floor
-			oneMinusX0f := 1<<6 - x0f
+			oneMinusX0f := one - x0f
 			a0 := ((oneMinusX0f * oneMinusX0f) >> 1) / oneOverS
-			x1f := x1 - x1Ceil + 1<<6
+			x1f := x1 - x1Ceil + one
 			am := ((x1f * x1f) >> 1) / oneOverS
 
 			if i := uint(x0i); i < uint(len(buf)) {
-				buf[i] += int20_12(d * a0)
+				buf[i] += int2ϕ(d * a0)
 			} else if debugOutOfBounds {
 				println("out of bounds #2")
 			}
 
 			if x1i == x0i+2 {
 				if i := uint(x0i + 1); i < uint(len(buf)) {
-					buf[i] += int20_12(d * (1<<6 - a0 - am))
+					buf[i] += int2ϕ(d * (one - a0 - am))
 				} else if debugOutOfBounds {
 					println("out of bounds #3")
 				}
 			} else {
-				a1 := ((1<<6 + 1<<5 - x0f) << 6) / oneOverS
+				a1 := ((oneAndAHalf - x0f) << ϕ) / oneOverS
 				if i := uint(x0i + 1); i < uint(len(buf)) {
-					buf[i] += int20_12(d * (a1 - a0))
+					buf[i] += int2ϕ(d * (a1 - a0))
 				} else if debugOutOfBounds {
 					println("out of bounds #4")
 				}
-				dTimesS := int20_12((d << 12) / oneOverS)
+				dTimesS := int2ϕ((d << (2 * ϕ)) / oneOverS)
 				for xi := x0i + 2; xi < x1i-1; xi++ {
 					if i := uint(xi); i < uint(len(buf)) {
 						buf[i] += dTimesS
@@ -246,16 +265,16 @@ func (z *rasterizer) drawLine(p, q point) {
 						println("out of bounds #5")
 					}
 				}
-				a2 := a1 + (fixed.Int26_6(x1i-x0i-3)<<12)/oneOverS
+				a2 := a1 + (int1ϕ(x1i-x0i-3)<<(2*ϕ))/oneOverS
 				if i := uint(x1i - 1); i < uint(len(buf)) {
-					buf[i] += int20_12(d * (1<<6 - a2 - am))
+					buf[i] += int2ϕ(d * (one - a2 - am))
 				} else if debugOutOfBounds {
 					println("out of bounds #6")
 				}
 			}
 
 			if i := uint(x1i); i < uint(len(buf)) {
-				buf[i] += int20_12(d * am)
+				buf[i] += int2ϕ(d * am)
 			} else if debugOutOfBounds {
 				println("out of bounds #7")
 			}

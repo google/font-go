@@ -23,4 +23,4 @@ var haveAccumulateSIMD = haveSSE4_1()
 func haveSSE4_1() bool
 
 //go:noescape
-func accumulateSIMD(dst []uint8, src []int20_12)
+func accumulateSIMD(dst []uint8, src []int2ϕ)

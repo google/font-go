@@ -18,4 +18,4 @@ package main
 
 const haveAccumulateSIMD = false
 
-func accumulateSIMD(dst []uint8, src []int20_12) {}
+func accumulateSIMD(dst []uint8, src []int2ϕ) {}

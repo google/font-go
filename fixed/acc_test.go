@@ -26,7 +26,7 @@ func TestAccumulateSIMDUnaligned(t *testing.T) {
 	}
 
 	dst := make([]uint8, 64)
-	src := make([]int20_12, 64)
+	src := make([]int2ϕ, 64)
 
 	for d := 0; d < 16; d++ {
 		for s := 0; s < 16; s++ {
@@ -40,8 +40,9 @@ func TestAccumulateSIMDShortDst(t *testing.T) {
 		t.Skip("No accumulateSIMD implemention")
 	}
 
+	const oneQuarter = 1 << (2*ϕ - 2)
 	dst := make([]uint8, 4)
-	src := []int20_12{1 << 10, 1 << 10, 1 << 10, 1 << 10}
+	src := []int2ϕ{oneQuarter, oneQuarter, oneQuarter, oneQuarter}
 	accumulateSIMD(dst[:0], src)
 	for i, got := range dst {
 		if got != 0 {
@@ -60,7 +61,7 @@ func BenchmarkAccumulateSIMD16(b *testing.B)  { benchAccumulate(b, robotoG16, tr
 func BenchmarkAccumulate100(b *testing.B)     { benchAccumulate(b, robotoG100, false) }
 func BenchmarkAccumulateSIMD100(b *testing.B) { benchAccumulate(b, robotoG100, true) }
 
-func testAccumulate(t *testing.T, src []int20_12, want []byte, simd bool) {
+func testAccumulate(t *testing.T, src []int2ϕ, want []byte, simd bool) {
 	if simd && !haveAccumulateSIMD {
 		t.Skip("No accumulateSIMD implemention")
 	}
@@ -90,7 +91,7 @@ func testAccumulate(t *testing.T, src []int20_12, want []byte, simd bool) {
 	}
 }
 
-func benchAccumulate(b *testing.B, src []int20_12, simd bool) {
+func benchAccumulate(b *testing.B, src []int2ϕ, simd bool) {
 	if simd && !haveAccumulateSIMD {
 		b.Skip("No accumulateSIMD implemention")
 	}
@@ -157,7 +158,7 @@ var sequenceAcc = []uint8{
 	0x40,
 }
 
-var sequence = []int20_12{
+var sequence = []int2ϕ{
 	+0x0200, // +0.125, // Running sum: +0.125
 	-0x0800, // -0.500, // Running sum: -0.375
 	+0x0400, // +0.250, // Running sum: -0.125
@@ -189,7 +190,7 @@ var robotoG16Acc = []uint8{
 }
 
 // robotoG16 is the to-be-accumulated 'g' from Roboto-Regular.ttf at 16 ppem.
-var robotoG16 = []int20_12{
+var robotoG16 = []int2ϕ{
 	0, 0, -669, -1323, -181, 1181, 151, -812,
 	1653, -1016, -2905, 397, 798, -959, 271, -234,
 	3638, -3319, 45, 3144, 140, -212, -3205, -231,
@@ -206,7 +207,7 @@ var robotoG16 = []int20_12{
 }
 
 // robotoG100 is the to-be-accumulated 'g' from Roboto-Regular.ttf at 100 ppem.
-var robotoG100 = []int20_12{
+var robotoG100 = []int2ϕ{
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -690, -956, -406, -413, -413, -379, 266, 378, 378, 378, 768, 1025, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -576, -1344, -1472, -704, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 285, 1254, 1297, 1205, 98, 0, 0, 0, 0, 0, -3348, -108, 0, 0, 0, 0, 0, 0, 2376,
 	1080, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -252, -2331, -1508, -5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 576, 2432, 1088, 0, 0, 0, -128, -3968, 0, 0, 0, 0, 0, 0, 0, 2816,

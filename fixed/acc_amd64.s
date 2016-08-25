@@ -18,12 +18,12 @@
 
 #include "textflag.h"
 
-DATA effEffEffs<>+0x00(SB)/8, $0x00000fff00000fff
-DATA effEffEffs<>+0x08(SB)/8, $0x00000fff00000fff
+DATA effEffs<>+0x00(SB)/8, $0x000000ff000000ff
+DATA effEffs<>+0x08(SB)/8, $0x000000ff000000ff
 DATA mask<>+0x00(SB)/8, $0x0c0804000c080400
 DATA mask<>+0x08(SB)/8, $0x0c0804000c080400
 
-GLOBL effEffEffs<>(SB), (NOPTR+RODATA), $16
+GLOBL effEffs<>(SB), (NOPTR+RODATA), $16
 GLOBL mask<>(SB), (NOPTR+RODATA), $16
 
 // func haveSSE4_1() bool
@@ -35,7 +35,7 @@ TEXT ·haveSSE4_1(SB), NOSPLIT, $0
 	MOVB CX, ret+0(FP)
 	RET
 
-// func accumulateSIMD(dst []uint8, src []int20_12)
+// func accumulateSIMD(dst []uint8, src []int2ϕ)
 //
 // XMM registers. Names are per
 // https://github.com/google/font-rs/blob/master/src/accumulate.c
@@ -63,10 +63,10 @@ TEXT ·accumulateSIMD(SB), NOSPLIT, $0-48
 	MOVQ CX, DX
 	ANDQ $-4, CX
 
-	// effEffEffs    := XMM(0x00000fff repeated four times) // Effective maximum of an int20_12.
+	// effEffs       := XMM(0x000000ff repeated four times) // Maximum of an uint8.
 	// mask          := XMM(0x0c080400 repeated four times) // Shuffle mask.
 	// offset        := XMM(0x00000000 repeated four times) // Cumulative sum.
-	MOVOU effEffEffs<>(SB), X5
+	MOVOU effEffs<>(SB), X5
 	MOVOU mask<>(SB), X6
 	XORPS X7, X7
 
@@ -100,15 +100,15 @@ loop4:
 	PADDD X7, X1
 
 	// y = abs(x)
+	// y >>= 4 // Shift by 2*ϕ - 8.
 	// y = min(y, effEffEffs)
-	// y >>= 4
 	//
 	// pabsd  %xmm1,%xmm2
-	// pminud %xmm5,%xmm2
 	// psrld  $0x4,%xmm2
+	// pminud %xmm5,%xmm2
 	BYTE $0x66; BYTE $0x0f; BYTE $0x38; BYTE $0x1e; BYTE $0xd1
-	BYTE $0x66; BYTE $0x0f; BYTE $0x38; BYTE $0x3b; BYTE $0xd5
 	BYTE $0x66; BYTE $0x0f; BYTE $0x72; BYTE $0xd2; BYTE $0x04
+	BYTE $0x66; BYTE $0x0f; BYTE $0x38; BYTE $0x3b; BYTE $0xd5
 
 	// z = shuffleTheLowBytesOfEach4ByteElement(y)
 	// copy(dst[:4], low4BytesOf(z))
@@ -137,15 +137,15 @@ loop1:
 	PADDD X7, X1
 
 	// y = abs(x)
+	// y >>= 4 // Shift by 2*ϕ - 8.
 	// y = min(y, effEffEffs)
-	// y >>= 4
 	//
 	// pabsd  %xmm1,%xmm2
-	// pminud %xmm5,%xmm2
 	// psrld  $0x4,%xmm2
+	// pminud %xmm5,%xmm2
 	BYTE $0x66; BYTE $0x0f; BYTE $0x38; BYTE $0x1e; BYTE $0xd1
-	BYTE $0x66; BYTE $0x0f; BYTE $0x38; BYTE $0x3b; BYTE $0xd5
 	BYTE $0x66; BYTE $0x0f; BYTE $0x72; BYTE $0xd2; BYTE $0x04
+	BYTE $0x66; BYTE $0x0f; BYTE $0x38; BYTE $0x3b; BYTE $0xd5
 
 	// dst[0] = uint8(y)
 	MOVL X2, BX
