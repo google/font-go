@@ -181,22 +181,20 @@ func accumulate(dst []uint8, src []int2ϕ) {
 const debugOutOfBounds = false
 
 func (z *rasterizer) drawLine(p, q point) {
-	px := int1ϕ(p.x * one)
-	py := int1ϕ(p.y * one)
-	qx := int1ϕ(q.x * one)
-	qy := int1ϕ(q.y * one)
-	if py == qy {
+	if p.y == q.y {
 		return
 	}
 	dir := int1ϕ(1)
-	if py > qy {
-		dir, px, py, qx, qy = -1, qx, qy, px, py
+	if p.y > q.y {
+		dir, p, q = -1, q, p
 	}
-	deltax, deltay := qx-px, qy-py
+	dxdy := (q.x - p.x) / (q.y - p.y)
+	py := int1ϕ(p.y * one)
+	qy := int1ϕ(q.y * one)
 
-	x := px
-	if py < 0 {
-		x -= py * deltax / deltay
+	x := int1ϕ(p.x * one)
+	if p.y < 0 {
+		x -= int1ϕ(float32(one) * p.y * dxdy)
 	}
 	y := floor(py)
 	yMax := ceil(qy)
@@ -207,7 +205,7 @@ func (z *rasterizer) drawLine(p, q point) {
 	for ; y < yMax; y++ {
 		buf := z.a[y*int32(z.w):]
 		dy := min(int1ϕ(y+1)<<ϕ, qy) - max(int1ϕ(y)<<ϕ, py)
-		xNext := x + dy*deltax/deltay
+		xNext := x + int1ϕ(float32(dy)*dxdy)
 		d := dy * dir
 		x0, x1 := x, xNext
 		if x > xNext {
