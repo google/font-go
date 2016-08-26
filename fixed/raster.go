@@ -26,7 +26,10 @@ const (
 	//
 	// For example, if ϕ == 10 (and int1ϕ is based on the int32 type) then we
 	// are using 22.10 fixed point math.
-	ϕ = 6
+	//
+	// When changing this number, also change the assembly code (search for ϕ
+	// in the .s files).
+	ϕ = 10
 
 	one          = 1 << ϕ
 	oneAndAHalf  = 1<<ϕ + 1<<(ϕ-1)

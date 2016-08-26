@@ -45,7 +45,7 @@ TEXT ·haveSSE4_1(SB), NOSPLIT, $0
 //	xmm2	y, z
 //	xmm3	-
 //	xmm4	-
-//	xmm5	effEffEffs
+//	xmm5	effEffs
 //	xmm6	mask
 //	xmm7	offset
 TEXT ·accumulateSIMD(SB), NOSPLIT, $0-48
@@ -100,14 +100,14 @@ loop4:
 	PADDD X7, X1
 
 	// y = abs(x)
-	// y >>= 4 // Shift by 2*ϕ - 8.
-	// y = min(y, effEffEffs)
+	// y >>= 12 // Shift by 2*ϕ - 8.
+	// y = min(y, effEffs)
 	//
 	// pabsd  %xmm1,%xmm2
-	// psrld  $0x4,%xmm2
+	// psrld  $0xc,%xmm2
 	// pminud %xmm5,%xmm2
 	BYTE $0x66; BYTE $0x0f; BYTE $0x38; BYTE $0x1e; BYTE $0xd1
-	BYTE $0x66; BYTE $0x0f; BYTE $0x72; BYTE $0xd2; BYTE $0x04
+	BYTE $0x66; BYTE $0x0f; BYTE $0x72; BYTE $0xd2; BYTE $0x0c
 	BYTE $0x66; BYTE $0x0f; BYTE $0x38; BYTE $0x3b; BYTE $0xd5
 
 	// z = shuffleTheLowBytesOfEach4ByteElement(y)
@@ -137,14 +137,14 @@ loop1:
 	PADDD X7, X1
 
 	// y = abs(x)
-	// y >>= 4 // Shift by 2*ϕ - 8.
-	// y = min(y, effEffEffs)
+	// y >>= 12 // Shift by 2*ϕ - 8.
+	// y = min(y, effEffs)
 	//
 	// pabsd  %xmm1,%xmm2
-	// psrld  $0x4,%xmm2
+	// psrld  $0xc,%xmm2
 	// pminud %xmm5,%xmm2
 	BYTE $0x66; BYTE $0x0f; BYTE $0x38; BYTE $0x1e; BYTE $0xd1
-	BYTE $0x66; BYTE $0x0f; BYTE $0x72; BYTE $0xd2; BYTE $0x04
+	BYTE $0x66; BYTE $0x0f; BYTE $0x72; BYTE $0xd2; BYTE $0x0c
 	BYTE $0x66; BYTE $0x0f; BYTE $0x38; BYTE $0x3b; BYTE $0xd5
 
 	// dst[0] = uint8(y)
