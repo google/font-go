@@ -17,6 +17,7 @@ package main
 import (
 	"image"
 	"io/ioutil"
+	"math"
 	"testing"
 )
 
@@ -105,6 +106,50 @@ func benchAccumulate(b *testing.B, src []int2ϕ, simd bool) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		acc(dst, src)
+	}
+}
+
+func TestRasterizePolygon(t *testing.T) {
+	t.Skip("TODO: make this test pass")
+	for radius := 4; radius <= 1024; radius *= 2 {
+		z := newRasterizer(2*radius, 2*radius)
+		for n := 3; n <= 17; n++ {
+			z.reset()
+			z.moveTo(point{
+				x: float32(2 * radius),
+				y: float32(1 * radius),
+			})
+			for i := 1; i < n; i++ {
+				z.lineTo(point{
+					x: float32(float64(radius) * (1 + math.Cos(float64(i)*2*math.Pi/float64(n)))),
+					y: float32(float64(radius) * (1 + math.Sin(float64(i)*2*math.Pi/float64(n)))),
+				})
+			}
+			z.closePath()
+
+			dst := image.NewAlpha(z.Bounds())
+			if haveAccumulateSIMD {
+				accumulateSIMD(dst.Pix, z.a)
+			} else {
+				accumulate(dst.Pix, z.a)
+			}
+
+			corners := [4]uint8{
+				dst.Pix[(0*radius+0)*dst.Stride+(0*radius+0)],
+				dst.Pix[(0*radius+0)*dst.Stride+(2*radius-1)],
+				dst.Pix[(2*radius-1)*dst.Stride+(0*radius+0)],
+				dst.Pix[(2*radius-1)*dst.Stride+(2*radius-1)],
+			}
+			if corners != [4]uint8{} {
+				t.Errorf("radius=%d, n=%d: corners were not all zero: %v", radius, n, corners)
+				continue
+			}
+			center := dst.Pix[radius*dst.Stride+radius]
+			if center < 0xfe { // TODO: can we tighten this to 0xff?
+				t.Errorf("radius=%d, n=%d: center: got %#02x, want >= 0xfe", radius, n, center)
+				continue
+			}
+		}
 	}
 }
 
