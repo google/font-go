@@ -108,10 +108,11 @@ type segment struct {
 }
 
 type rasterizer struct {
-	a    []int2ϕ
-	last point
-	w    int
-	h    int
+	a     []int2ϕ
+	first point
+	last  point
+	w     int
+	h     int
 }
 
 func newRasterizer(w, h int) *rasterizer {
@@ -130,6 +131,7 @@ func (z *rasterizer) reset() {
 	for i := range z.a {
 		z.a[i] = 0
 	}
+	z.first = point{}
 	z.last = point{}
 }
 
@@ -146,16 +148,15 @@ func (z *rasterizer) rasterize(f *Font, a glyphData, transform f32.Aff3) {
 		for g.nextSegment() {
 			switch g.seg.op {
 			case moveTo:
-				z.last = mul(&transform, g.seg.p)
+				p := mul(&transform, g.seg.p)
+				z.moveTo(p)
 			case lineTo:
 				p := mul(&transform, g.seg.p)
-				z.drawLine(z.last, p)
-				z.last = p
+				z.lineTo(p)
 			case quadTo:
 				p := mul(&transform, g.seg.p)
 				q := mul(&transform, g.seg.q)
-				z.drawQuad(z.last, p, q)
-				z.last = q
+				z.quadTo(p, q)
 			}
 		}
 	}
@@ -180,7 +181,18 @@ func accumulate(dst []uint8, src []int2ϕ) {
 
 const debugOutOfBounds = false
 
-func (z *rasterizer) drawLine(p, q point) {
+func (z *rasterizer) closePath() {
+	z.lineTo(z.first)
+}
+
+func (z *rasterizer) moveTo(p point) {
+	z.first = p
+	z.last = p
+}
+
+func (z *rasterizer) lineTo(q point) {
+	p := z.last
+	z.last = q
 	if p.y == q.y {
 		return
 	}
@@ -282,23 +294,20 @@ func (z *rasterizer) drawLine(p, q point) {
 	}
 }
 
-func (z *rasterizer) drawQuad(p, q, r point) {
+func (z *rasterizer) quadTo(q, r point) {
+	p := z.last
 	devx := p.x - 2*q.x + r.x
 	devy := p.y - 2*q.y + r.y
 	devsq := devx*devx + devy*devy
-	if devsq < 0.333 {
-		z.drawLine(p, r)
-		return
+	if devsq >= 0.333 {
+		const tol = 3
+		n := 1 + int(math.Floor(math.Sqrt(math.Sqrt(tol*float64(devsq)))))
+		t, nInv := float32(0), 1/float32(n)
+		for i := 0; i < n-1; i++ {
+			t += nInv
+			s := lerp(t, lerp(t, p, q), lerp(t, q, r))
+			z.lineTo(s)
+		}
 	}
-	const tol = 3
-	n := 1 + int(math.Floor(math.Sqrt(math.Sqrt(tol*float64(devsq)))))
-	t, nInv := float32(0), 1/float32(n)
-	last := p
-	for i := 0; i < n-1; i++ {
-		t += nInv
-		s := lerp(t, lerp(t, p, q), lerp(t, q, r))
-		z.drawLine(last, s)
-		last = s
-	}
-	z.drawLine(last, r)
+	z.lineTo(r)
 }
