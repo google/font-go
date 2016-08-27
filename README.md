@@ -3,7 +3,10 @@
 This is a port of https://github.com/google/font-rs to the Go programming
 language.
 
-There are two implementations, using fixed and floating point math.
+There are two implementations, using fixed and floating point math. The fixed
+point implementation benchmarks 1.3 to 1.4 times faster on GOARCH=amd64, but
+may have rendering artifacts above 1024 ppem. It uses mostly int32 math,
+although some int64 and float32 math is used for numerical accuracy.
 
 You can visually inspect rasterization by running:
 

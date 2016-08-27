@@ -245,28 +245,56 @@ func (z *rasterizer) lineTo(q point) {
 			}
 		} else {
 			oneOverS := x1 - x0
+			twoOverS := 2 * oneOverS
 			x0f := x0 - x0Floor
 			oneMinusX0f := one - x0f
-			a0 := ((oneMinusX0f * oneMinusX0f) >> 1) / oneOverS
+			oneMinusX0fSquared := oneMinusX0f * oneMinusX0f
 			x1f := x1 - x1Ceil + one
-			am := ((x1f * x1f) >> 1) / oneOverS
+			x1fSquared := x1f * x1f
+
+			// These next two variables are unused, as rounding errors are
+			// minimized when we delay the division by oneOverS for as long as
+			// possible. These lines of code (and the "In ideal math" comments
+			// below) are commented out instead of deleted in order to aid the
+			// comparison with the floating point version of the rasterizer.
+			//
+			// a0 := ((oneMinusX0f * oneMinusX0f) >> 1) / oneOverS
+			// am := ((x1f * x1f) >> 1) / oneOverS
 
 			if i := uint(x0i); i < uint(len(buf)) {
-				buf[i] += int2ϕ(d * a0)
+				// In ideal math: buf[i] += int2ϕ(d * a0)
+				D := oneMinusX0fSquared
+				D *= d
+				D /= twoOverS
+				buf[i] += int2ϕ(D)
 			} else if debugOutOfBounds {
 				println("out of bounds #2")
 			}
 
 			if x1i == x0i+2 {
 				if i := uint(x0i + 1); i < uint(len(buf)) {
-					buf[i] += int2ϕ(d * (one - a0 - am))
+					// In ideal math: buf[i] += int2ϕ(d * (one - a0 - am))
+					D := twoOverS<<ϕ - oneMinusX0fSquared - x1fSquared
+					D *= d
+					D /= twoOverS
+					buf[i] += int2ϕ(D)
 				} else if debugOutOfBounds {
 					println("out of bounds #3")
 				}
 			} else {
-				a1 := ((oneAndAHalf - x0f) << ϕ) / oneOverS
+				// This is commented out for the same reason as a0 and am.
+				//
+				// a1 := ((oneAndAHalf - x0f) << ϕ) / oneOverS
+
 				if i := uint(x0i + 1); i < uint(len(buf)) {
-					buf[i] += int2ϕ(d * (a1 - a0))
+					// In ideal math: buf[i] += int2ϕ(d * (a1 - a0))
+					//
+					// Convert to int64 to avoid overflow. Without that,
+					// TestRasterizePolygon fails.
+					D := int64((oneAndAHalf-x0f)<<(ϕ+1) - oneMinusX0fSquared)
+					D *= int64(d)
+					D /= int64(twoOverS)
+					buf[i] += int2ϕ(D)
 				} else if debugOutOfBounds {
 					println("out of bounds #4")
 				}
@@ -278,16 +306,34 @@ func (z *rasterizer) lineTo(q point) {
 						println("out of bounds #5")
 					}
 				}
-				a2 := a1 + (int1ϕ(x1i-x0i-3)<<(2*ϕ))/oneOverS
+
+				// This is commented out for the same reason as a0 and am.
+				//
+				// a2 := a1 + (int1ϕ(x1i-x0i-3)<<(2*ϕ))/oneOverS
+
 				if i := uint(x1i - 1); i < uint(len(buf)) {
-					buf[i] += int2ϕ(d * (one - a2 - am))
+					// In ideal math: buf[i] += int2ϕ(d * (one - a2 - am))
+					//
+					// Convert to int64 to avoid overflow. Without that,
+					// TestRasterizePolygon fails.
+					D := int64(twoOverS << ϕ)
+					D -= int64((oneAndAHalf - x0f) << (ϕ + 1))
+					D -= int64((x1i - x0i - 3) << (2*ϕ + 1))
+					D -= int64(x1fSquared)
+					D *= int64(d)
+					D /= int64(twoOverS)
+					buf[i] += int2ϕ(D)
 				} else if debugOutOfBounds {
 					println("out of bounds #6")
 				}
 			}
 
 			if i := uint(x1i); i < uint(len(buf)) {
-				buf[i] += int2ϕ(d * am)
+				// In ideal math: buf[i] += int2ϕ(d * am)
+				D := x1fSquared
+				D *= d
+				D /= twoOverS
+				buf[i] += int2ϕ(D)
 			} else if debugOutOfBounds {
 				println("out of bounds #7")
 			}
