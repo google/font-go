@@ -61,11 +61,11 @@ TEXT ·accumulateSIMD(SB), NOSPLIT, $8-48
 	ANDQ $-4, CX
 
 	// Set MXCSR bits 13 and 14, so that the CVTPS2PL below is "Round To Zero".
-	STMXCSR mxcsr-8(SP)
-	MOVL    mxcsr-8(SP), AX
+	STMXCSR mxcsrOrig-8(SP)
+	MOVL    mxcsrOrig-8(SP), AX
 	ORL     $0x6000, AX
-	MOVL    AX, mxcsr-8(SP)
-	LDMXCSR mxcsr-8(SP)
+	MOVL    AX, mxcsrNew-4(SP)
+	LDMXCSR mxcsrNew-4(SP)
 
 	// almost256 := XMM(0x437fffff repeated four times) // 255.99998 as a float32.
 	// ones      := XMM(0x3f800000 repeated four times) // 1 as a float32.
@@ -137,7 +137,7 @@ loop4:
 loop1:
 	// for i < len(src)
 	CMPQ AX, DX
-	JAE  end
+	JAE  restoreMXCSR
 
 	// x = src[i] + offset
 	MOVL  (SI), X1
@@ -167,6 +167,9 @@ loop1:
 	ADDQ $1, DI
 	ADDQ $4, SI
 	JMP  loop1
+
+restoreMXCSR:
+	LDMXCSR mxcsrOrig-8(SP)
 
 end:
 	RET
