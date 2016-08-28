@@ -18,8 +18,8 @@
 
 #include "textflag.h"
 
-DATA twoFiftyFives<>+0x00(SB)/8, $0x437f0000437f0000
-DATA twoFiftyFives<>+0x08(SB)/8, $0x437f0000437f0000
+DATA almost256<>+0x00(SB)/8, $0x437fffff437fffff
+DATA almost256<>+0x08(SB)/8, $0x437fffff437fffff
 DATA ones<>+0x00(SB)/8, $0x3f8000003f800000
 DATA ones<>+0x08(SB)/8, $0x3f8000003f800000
 DATA signMask<>+0x00(SB)/8, $0x7fffffff7fffffff
@@ -27,7 +27,7 @@ DATA signMask<>+0x08(SB)/8, $0x7fffffff7fffffff
 DATA mask<>+0x00(SB)/8, $0x0c0804000c080400
 DATA mask<>+0x08(SB)/8, $0x0c0804000c080400
 
-GLOBL twoFiftyFives<>(SB), (NOPTR+RODATA), $16
+GLOBL almost256<>(SB), (NOPTR+RODATA), $16
 GLOBL ones<>(SB), (NOPTR+RODATA), $16
 GLOBL signMask<>(SB), (NOPTR+RODATA), $16
 GLOBL mask<>(SB), (NOPTR+RODATA), $16
@@ -40,7 +40,7 @@ GLOBL mask<>(SB), (NOPTR+RODATA), $16
 //	xmm0	scratch
 //	xmm1	x
 //	xmm2	y, z
-//	xmm3	twoFiftyFives
+//	xmm3	almost256
 //	xmm4	ones
 //	xmm5	signMask
 //	xmm6	mask
@@ -67,12 +67,12 @@ TEXT ·accumulateSIMD(SB), NOSPLIT, $8-48
 	MOVL    AX, mxcsr-8(SP)
 	LDMXCSR mxcsr-8(SP)
 
-	// twoFiftyFives := XMM(0x437f0000 repeated four times) // 255 as a float32.
-	// ones          := XMM(0x3f800000 repeated four times) // 1 as a float32.
-	// signMask      := XMM(0x7fffffff repeated four times) // All but the sign bit of a float32.
-	// mask          := XMM(0x0c080400 repeated four times) // Shuffle mask.
-	// offset        := XMM(0x00000000 repeated four times) // Cumulative sum.
-	MOVOU twoFiftyFives<>(SB), X3
+	// almost256 := XMM(0x437fffff repeated four times) // 255.99998 as a float32.
+	// ones      := XMM(0x3f800000 repeated four times) // 1 as a float32.
+	// signMask  := XMM(0x7fffffff repeated four times) // All but the sign bit of a float32.
+	// mask      := XMM(0x0c080400 repeated four times) // Shuffle mask.
+	// offset    := XMM(0x00000000 repeated four times) // Cumulative sum.
+	MOVOU almost256<>(SB), X3
 	MOVOU ones<>(SB), X4
 	MOVOU signMask<>(SB), X5
 	MOVOU mask<>(SB), X6
@@ -109,7 +109,7 @@ loop4:
 
 	// y = x & signMask
 	// y = min(y, ones)
-	// y = mul(y, twoFiftyFives)
+	// y = mul(y, almost256)
 	MOVOU X5, X2
 	ANDPS X1, X2
 	MINPS X4, X2
@@ -145,7 +145,7 @@ loop1:
 
 	// y = x & signMask
 	// y = min(y, ones)
-	// y = mul(y, twoFiftyFives)
+	// y = mul(y, almost256)
 	MOVOU X5, X2
 	ANDPS X1, X2
 	MINPS X4, X2

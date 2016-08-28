@@ -214,8 +214,8 @@ func TestRasterizePolygon(t *testing.T) {
 				continue
 			}
 			center := dst.Pix[radius*dst.Stride+radius]
-			if center < 0xfe { // TODO: can we tighten this to 0xff?
-				t.Errorf("radius=%d, n=%d: center: got %#02x, want >= 0xfe", radius, n, center)
+			if center != 0xff {
+				t.Errorf("radius=%d, n=%d: center: got %#02x, want 0xff", radius, n, center)
 				continue
 			}
 		}

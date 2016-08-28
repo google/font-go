@@ -63,9 +63,9 @@ TEXT ·accumulateSIMD(SB), NOSPLIT, $0-48
 	MOVQ CX, DX
 	ANDQ $-4, CX
 
-	// effEffs       := XMM(0x000000ff repeated four times) // Maximum of an uint8.
-	// mask          := XMM(0x0c080400 repeated four times) // Shuffle mask.
-	// offset        := XMM(0x00000000 repeated four times) // Cumulative sum.
+	// effEffs := XMM(0x000000ff repeated four times) // Maximum of an uint8.
+	// mask    := XMM(0x0c080400 repeated four times) // Shuffle mask.
+	// offset  := XMM(0x00000000 repeated four times) // Cumulative sum.
 	MOVOU effEffs<>(SB), X5
 	MOVOU mask<>(SB), X6
 	XORPS X7, X7

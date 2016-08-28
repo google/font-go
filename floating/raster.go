@@ -153,6 +153,21 @@ func (z *rasterizer) rasterize(f *Font, a glyphData, transform f32.Aff3) {
 }
 
 func accumulate(dst []uint8, src []float32) {
+	// almost256 scales a floating point value in the range [0, 1] to a uint8
+	// value in the range [0x00, 0xff].
+	//
+	// 255 is too small. Floating point math accumulates rounding errors, so a
+	// fully covered src value that would in ideal math be float32(1) might be
+	// float32(1-ε), and uint8(255 * (1-ε)) would be 0xfe instead of 0xff. The
+	// uint8 conversion rounds to zero, not to nearest.
+	//
+	// 256 is too big. If we multiplied by 256, below, then a fully covered src
+	// value of float32(1) would translate to uint8(256 * 1), which can be 0x00
+	// instead of the maximal value 0xff.
+	//
+	// math.Float32bits(almost256) is 0x437fffff.
+	const almost256 = 255.99998
+
 	// TODO: pix adjustment if dst.Bounds() != z.Bounds()?
 	acc := float32(0)
 	for i, v := range src {
@@ -164,7 +179,7 @@ func accumulate(dst []uint8, src []float32) {
 		if a > 1 {
 			a = 1
 		}
-		dst[i] = uint8(255 * a)
+		dst[i] = uint8(almost256 * a)
 	}
 }
 
