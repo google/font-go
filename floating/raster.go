@@ -168,8 +168,6 @@ func accumulate(dst []uint8, src []float32) {
 	}
 }
 
-const debugOutOfBounds = false
-
 func (z *rasterizer) closePath() {
 	z.lineTo(z.first)
 }
@@ -221,13 +219,9 @@ func (z *rasterizer) lineTo(q point) {
 			xmf := 0.5*(x+xNext) - x0Floor
 			if i := clamp(x0i+0, width); i < uint(len(buf)) {
 				buf[i] += d - d*xmf
-			} else if debugOutOfBounds {
-				println("out of bounds #0")
 			}
 			if i := clamp(x0i+1, width); i < uint(len(buf)) {
 				buf[i] += d * xmf
-			} else if debugOutOfBounds {
-				println("out of bounds #1")
 			}
 		} else {
 			s := 1 / (x1 - x0)
@@ -239,43 +233,31 @@ func (z *rasterizer) lineTo(q point) {
 
 			if i := clamp(x0i, width); i < uint(len(buf)) {
 				buf[i] += d * a0
-			} else if debugOutOfBounds {
-				println("out of bounds #2")
 			}
 
 			if x1i == x0i+2 {
 				if i := clamp(x0i+1, width); i < uint(len(buf)) {
 					buf[i] += d * (1 - a0 - am)
-				} else if debugOutOfBounds {
-					println("out of bounds #3")
 				}
 			} else {
 				a1 := s * (1.5 - x0f)
 				if i := clamp(x0i+1, width); i < uint(len(buf)) {
 					buf[i] += d * (a1 - a0)
-				} else if debugOutOfBounds {
-					println("out of bounds #4")
 				}
 				dTimesS := d * s
 				for xi := x0i + 2; xi < x1i-1; xi++ {
 					if i := clamp(xi, width); i < uint(len(buf)) {
 						buf[i] += dTimesS
-					} else if debugOutOfBounds {
-						println("out of bounds #5")
 					}
 				}
 				a2 := a1 + s*float32(x1i-x0i-3)
 				if i := clamp(x1i-1, width); i < uint(len(buf)) {
 					buf[i] += d * (1 - a2 - am)
-				} else if debugOutOfBounds {
-					println("out of bounds #6")
 				}
 			}
 
 			if i := clamp(x1i, width); i < uint(len(buf)) {
 				buf[i] += d * am
-			} else if debugOutOfBounds {
-				println("out of bounds #7")
 			}
 		}
 

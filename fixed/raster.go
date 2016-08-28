@@ -192,8 +192,6 @@ func accumulate(dst []uint8, src []int2ϕ) {
 	}
 }
 
-const debugOutOfBounds = false
-
 func (z *rasterizer) closePath() {
 	z.lineTo(z.first)
 }
@@ -247,13 +245,9 @@ func (z *rasterizer) lineTo(q point) {
 			xmf := (x+xNext)>>1 - x0Floor
 			if i := clamp(x0i+0, width); i < uint(len(buf)) {
 				buf[i] += int2ϕ(d * (one - xmf))
-			} else if debugOutOfBounds {
-				println("out of bounds #0")
 			}
 			if i := clamp(x0i+1, width); i < uint(len(buf)) {
 				buf[i] += int2ϕ(d * xmf)
-			} else if debugOutOfBounds {
-				println("out of bounds #1")
 			}
 		} else {
 			oneOverS := x1 - x0
@@ -279,8 +273,6 @@ func (z *rasterizer) lineTo(q point) {
 				D *= d
 				D /= twoOverS
 				buf[i] += int2ϕ(D)
-			} else if debugOutOfBounds {
-				println("out of bounds #2")
 			}
 
 			if x1i == x0i+2 {
@@ -290,8 +282,6 @@ func (z *rasterizer) lineTo(q point) {
 					D *= d
 					D /= twoOverS
 					buf[i] += int2ϕ(D)
-				} else if debugOutOfBounds {
-					println("out of bounds #3")
 				}
 			} else {
 				// This is commented out for the same reason as a0 and am.
@@ -307,15 +297,11 @@ func (z *rasterizer) lineTo(q point) {
 					D *= int64(d)
 					D /= int64(twoOverS)
 					buf[i] += int2ϕ(D)
-				} else if debugOutOfBounds {
-					println("out of bounds #4")
 				}
 				dTimesS := int2ϕ((d << (2 * ϕ)) / oneOverS)
 				for xi := x0i + 2; xi < x1i-1; xi++ {
 					if i := clamp(xi, width); i < uint(len(buf)) {
 						buf[i] += dTimesS
-					} else if debugOutOfBounds {
-						println("out of bounds #5")
 					}
 				}
 
@@ -335,8 +321,6 @@ func (z *rasterizer) lineTo(q point) {
 					D *= int64(d)
 					D /= int64(twoOverS)
 					buf[i] += int2ϕ(D)
-				} else if debugOutOfBounds {
-					println("out of bounds #6")
 				}
 			}
 
@@ -346,8 +330,6 @@ func (z *rasterizer) lineTo(q point) {
 				D *= d
 				D /= twoOverS
 				buf[i] += int2ϕ(D)
-			} else if debugOutOfBounds {
-				println("out of bounds #7")
 			}
 		}
 
