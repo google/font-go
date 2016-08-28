@@ -61,6 +61,16 @@ func min(x, y int1ϕ) int1ϕ {
 func floor(x int1ϕ) int32 { return int32(x >> ϕ) }
 func ceil(x int1ϕ) int32  { return int32((x + oneMinusIota) >> ϕ) }
 
+func clamp(i, width int32) uint {
+	if i < 0 {
+		return 0
+	}
+	if i < width {
+		return uint(i)
+	}
+	return uint(width)
+}
+
 func concat(a, b *f32.Aff3) f32.Aff3 {
 	return f32.Aff3{
 		a[0]*b[0] + a[1]*b[3],
@@ -208,19 +218,21 @@ func (z *rasterizer) lineTo(q point) {
 	qy := int1ϕ(q.y * one)
 
 	x := int1ϕ(p.x * one)
-	if p.y < 0 {
-		x -= int1ϕ(float32(one) * p.y * dxdy)
-	}
 	y := floor(py)
 	yMax := ceil(qy)
 	if yMax > int32(z.h) {
 		yMax = int32(z.h)
 	}
+	width := int32(z.w)
 
 	for ; y < yMax; y++ {
-		buf := z.a[y*int32(z.w):]
 		dy := min(int1ϕ(y+1)<<ϕ, qy) - max(int1ϕ(y)<<ϕ, py)
 		xNext := x + int1ϕ(float32(dy)*dxdy)
+		if y < 0 {
+			x = xNext
+			continue
+		}
+		buf := z.a[y*width:]
 		d := dy * dir
 		x0, x1 := x, xNext
 		if x > xNext {
@@ -233,12 +245,12 @@ func (z *rasterizer) lineTo(q point) {
 
 		if x1i <= x0i+1 {
 			xmf := (x+xNext)>>1 - x0Floor
-			if i := uint(x0i + 0); i < uint(len(buf)) {
+			if i := clamp(x0i+0, width); i < uint(len(buf)) {
 				buf[i] += int2ϕ(d * (one - xmf))
 			} else if debugOutOfBounds {
 				println("out of bounds #0")
 			}
-			if i := uint(x0i + 1); i < uint(len(buf)) {
+			if i := clamp(x0i+1, width); i < uint(len(buf)) {
 				buf[i] += int2ϕ(d * xmf)
 			} else if debugOutOfBounds {
 				println("out of bounds #1")
@@ -261,7 +273,7 @@ func (z *rasterizer) lineTo(q point) {
 			// a0 := ((oneMinusX0f * oneMinusX0f) >> 1) / oneOverS
 			// am := ((x1f * x1f) >> 1) / oneOverS
 
-			if i := uint(x0i); i < uint(len(buf)) {
+			if i := clamp(x0i, width); i < uint(len(buf)) {
 				// In ideal math: buf[i] += int2ϕ(d * a0)
 				D := oneMinusX0fSquared
 				D *= d
@@ -272,7 +284,7 @@ func (z *rasterizer) lineTo(q point) {
 			}
 
 			if x1i == x0i+2 {
-				if i := uint(x0i + 1); i < uint(len(buf)) {
+				if i := clamp(x0i+1, width); i < uint(len(buf)) {
 					// In ideal math: buf[i] += int2ϕ(d * (one - a0 - am))
 					D := twoOverS<<ϕ - oneMinusX0fSquared - x1fSquared
 					D *= d
@@ -286,7 +298,7 @@ func (z *rasterizer) lineTo(q point) {
 				//
 				// a1 := ((oneAndAHalf - x0f) << ϕ) / oneOverS
 
-				if i := uint(x0i + 1); i < uint(len(buf)) {
+				if i := clamp(x0i+1, width); i < uint(len(buf)) {
 					// In ideal math: buf[i] += int2ϕ(d * (a1 - a0))
 					//
 					// Convert to int64 to avoid overflow. Without that,
@@ -300,7 +312,7 @@ func (z *rasterizer) lineTo(q point) {
 				}
 				dTimesS := int2ϕ((d << (2 * ϕ)) / oneOverS)
 				for xi := x0i + 2; xi < x1i-1; xi++ {
-					if i := uint(xi); i < uint(len(buf)) {
+					if i := clamp(xi, width); i < uint(len(buf)) {
 						buf[i] += dTimesS
 					} else if debugOutOfBounds {
 						println("out of bounds #5")
@@ -311,7 +323,7 @@ func (z *rasterizer) lineTo(q point) {
 				//
 				// a2 := a1 + (int1ϕ(x1i-x0i-3)<<(2*ϕ))/oneOverS
 
-				if i := uint(x1i - 1); i < uint(len(buf)) {
+				if i := clamp(x1i-1, width); i < uint(len(buf)) {
 					// In ideal math: buf[i] += int2ϕ(d * (one - a2 - am))
 					//
 					// Convert to int64 to avoid overflow. Without that,
@@ -328,7 +340,7 @@ func (z *rasterizer) lineTo(q point) {
 				}
 			}
 
-			if i := uint(x1i); i < uint(len(buf)) {
+			if i := clamp(x1i, width); i < uint(len(buf)) {
 				// In ideal math: buf[i] += int2ϕ(d * am)
 				D := x1fSquared
 				D *= d

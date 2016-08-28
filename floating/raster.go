@@ -35,8 +35,18 @@ func min(x, y float32) float32 {
 	return y
 }
 
-func floor(x float32) int { return int(math.Floor(float64(x))) }
-func ceil(x float32) int  { return int(math.Ceil(float64(x))) }
+func floor(x float32) int32 { return int32(math.Floor(float64(x))) }
+func ceil(x float32) int32  { return int32(math.Ceil(float64(x))) }
+
+func clamp(i, width int32) uint {
+	if i < 0 {
+		return 0
+	}
+	if i < width {
+		return uint(i)
+	}
+	return uint(width)
+}
 
 func concat(a, b *f32.Aff3) f32.Aff3 {
 	return f32.Aff3{
@@ -182,20 +192,21 @@ func (z *rasterizer) lineTo(q point) {
 	dxdy := (q.x - p.x) / (q.y - p.y)
 
 	x := p.x
-	if p.y < 0 {
-		x -= p.y * dxdy
-	}
-	// TODO: floor instead of round to zero? Make this max(0, etc)? int instead of uint is more Go-like.
-	y := int(p.y)
+	y := floor(p.y)
 	yMax := ceil(q.y)
-	if yMax > z.h {
-		yMax = z.h
+	if yMax > int32(z.h) {
+		yMax = int32(z.h)
 	}
+	width := int32(z.w)
 
 	for ; y < yMax; y++ {
-		buf := z.a[y*z.w:]
 		dy := min(float32(y+1), q.y) - max(float32(y), p.y)
 		xNext := x + dy*dxdy
+		if y < 0 {
+			x = xNext
+			continue
+		}
+		buf := z.a[y*width:]
 		d := dy * dir
 		x0, x1 := x, xNext
 		if x > xNext {
@@ -208,12 +219,12 @@ func (z *rasterizer) lineTo(q point) {
 
 		if x1i <= x0i+1 {
 			xmf := 0.5*(x+xNext) - x0Floor
-			if i := uint(x0i + 0); i < uint(len(buf)) {
+			if i := clamp(x0i+0, width); i < uint(len(buf)) {
 				buf[i] += d - d*xmf
 			} else if debugOutOfBounds {
 				println("out of bounds #0")
 			}
-			if i := uint(x0i + 1); i < uint(len(buf)) {
+			if i := clamp(x0i+1, width); i < uint(len(buf)) {
 				buf[i] += d * xmf
 			} else if debugOutOfBounds {
 				println("out of bounds #1")
@@ -226,42 +237,42 @@ func (z *rasterizer) lineTo(q point) {
 			x1f := x1 - x1Ceil + 1
 			am := 0.5 * s * x1f * x1f
 
-			if i := uint(x0i); i < uint(len(buf)) {
+			if i := clamp(x0i, width); i < uint(len(buf)) {
 				buf[i] += d * a0
 			} else if debugOutOfBounds {
 				println("out of bounds #2")
 			}
 
 			if x1i == x0i+2 {
-				if i := uint(x0i + 1); i < uint(len(buf)) {
+				if i := clamp(x0i+1, width); i < uint(len(buf)) {
 					buf[i] += d * (1 - a0 - am)
 				} else if debugOutOfBounds {
 					println("out of bounds #3")
 				}
 			} else {
 				a1 := s * (1.5 - x0f)
-				if i := uint(x0i + 1); i < uint(len(buf)) {
+				if i := clamp(x0i+1, width); i < uint(len(buf)) {
 					buf[i] += d * (a1 - a0)
 				} else if debugOutOfBounds {
 					println("out of bounds #4")
 				}
 				dTimesS := d * s
 				for xi := x0i + 2; xi < x1i-1; xi++ {
-					if i := uint(xi); i < uint(len(buf)) {
+					if i := clamp(xi, width); i < uint(len(buf)) {
 						buf[i] += dTimesS
 					} else if debugOutOfBounds {
 						println("out of bounds #5")
 					}
 				}
 				a2 := a1 + s*float32(x1i-x0i-3)
-				if i := uint(x1i - 1); i < uint(len(buf)) {
+				if i := clamp(x1i-1, width); i < uint(len(buf)) {
 					buf[i] += d * (1 - a2 - am)
 				} else if debugOutOfBounds {
 					println("out of bounds #6")
 				}
 			}
 
-			if i := uint(x1i); i < uint(len(buf)) {
+			if i := clamp(x1i, width); i < uint(len(buf)) {
 				buf[i] += d * am
 			} else if debugOutOfBounds {
 				println("out of bounds #7")

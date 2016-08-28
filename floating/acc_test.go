@@ -15,9 +15,13 @@
 package main
 
 import (
+	"fmt"
 	"image"
+	"image/png"
 	"io/ioutil"
 	"math"
+	"os"
+	"path"
 	"testing"
 )
 
@@ -108,6 +112,75 @@ func benchAccumulate(b *testing.B, src []float32, simd bool) {
 	}
 }
 
+func pointOnCircle(center, radius, index, number int) point {
+	c := float64(center)
+	r := float64(radius)
+	i := float64(index)
+	n := float64(number)
+	return point{
+		x: float32(c + r*(math.Cos(2*math.Pi*i/n))),
+		y: float32(c + r*(math.Sin(2*math.Pi*i/n))),
+	}
+}
+
+func encodePNG(dstFilename string, src image.Image) error {
+	f, err := os.Create(dstFilename)
+	if err != nil {
+		return err
+	}
+	err = png.Encode(f, src)
+	if err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+func TestRasterizeOutOfBounds(t *testing.T) {
+	// Set this to a non-empty string such as "/tmp" to manually inspect the
+	// rasterization.
+	//
+	// If empty, this test simply checks that calling lineTo with points out of
+	// bounds of the rasterizer's (0, 0) to (width, height) rectangle doesn't
+	// panic.
+	const tmpDirForManualInspection = ""
+
+	const center, radius, n = 16, 20, 16
+	z := newRasterizer(2*center, 2*center)
+	for i := 0; i < n; i++ {
+		for j := 1; j < n/2; j++ {
+			z.reset()
+			z.moveTo(point{1 * center, 1 * center})
+			z.lineTo(pointOnCircle(center, radius, i+0, n))
+			z.lineTo(pointOnCircle(center, radius, i+j, n))
+			z.closePath()
+
+			z.moveTo(point{0 * center, 0 * center})
+			z.lineTo(point{0 * center, 2 * center})
+			z.lineTo(point{2 * center, 2 * center})
+			z.lineTo(point{2 * center, 0 * center})
+			z.closePath()
+
+			dst := image.NewAlpha(z.Bounds())
+			if haveAccumulateSIMD {
+				accumulateSIMD(dst.Pix, z.a)
+			} else {
+				accumulate(dst.Pix, z.a)
+			}
+
+			if tmpDirForManualInspection == "" {
+				continue
+			}
+
+			filename := path.Join(tmpDirForManualInspection, fmt.Sprintf("out-%02d-%02d.png", i, j))
+			if err := encodePNG(filename, dst); err != nil {
+				t.Error(err)
+			}
+			t.Logf("wrote %s", filename)
+		}
+	}
+}
+
 func TestRasterizePolygon(t *testing.T) {
 	for radius := 4; radius <= 1024; radius *= 2 {
 		z := newRasterizer(2*radius, 2*radius)
@@ -118,10 +191,7 @@ func TestRasterizePolygon(t *testing.T) {
 				y: float32(1 * radius),
 			})
 			for i := 1; i < n; i++ {
-				z.lineTo(point{
-					x: float32(float64(radius) * (1 + math.Cos(float64(i)*2*math.Pi/float64(n)))),
-					y: float32(float64(radius) * (1 + math.Sin(float64(i)*2*math.Pi/float64(n)))),
-				})
+				z.lineTo(pointOnCircle(radius, radius, i, n))
 			}
 			z.closePath()
 
