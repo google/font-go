@@ -338,13 +338,25 @@ func (z *rasterizer) lineTo(q point) {
 }
 
 func (z *rasterizer) quadTo(q, r point) {
+	// We make a linear approximation to the curve.
+	// http://lists.nongnu.org/archive/html/freetype-devel/2016-08/msg00080.html
+	// gives the rationale for this evenly spaced heuristic instead of a
+	// recursive de Casteljau approach:
+	//
+	// The reason for the subdivision by n is that I expect the "flatness"
+	// computation to be semi-expensive (it's done once rather than on each
+	// potential subdivision) and also because you'll often get fewer
+	// subdivisions. Taking a circular arc as a simplifying assumption (ie a
+	// spherical 🐄), where I get n, a recursive approach would get 2^⌈lg n⌉,
+	// which, if I haven't made any horrible mistakes, is expected to be 33%
+	// more in the limit.
 	p := z.last
 	devx := p.x - 2*q.x + r.x
 	devy := p.y - 2*q.y + r.y
 	devsq := devx*devx + devy*devy
 	if devsq >= 0.333 {
 		const tol = 3
-		n := 1 + int(math.Floor(math.Sqrt(math.Sqrt(tol*float64(devsq)))))
+		n := 1 + int(math.Sqrt(math.Sqrt(tol*float64(devsq))))
 		t, nInv := float32(0), 1/float32(n)
 		for i := 0; i < n-1; i++ {
 			t += nInv
