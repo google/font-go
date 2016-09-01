@@ -202,23 +202,51 @@ func TestRasterizePolygon(t *testing.T) {
 			} else {
 				accumulate(dst.Pix, z.a)
 			}
-
-			corners := [4]uint8{
-				dst.Pix[(0*radius+0)*dst.Stride+(0*radius+0)],
-				dst.Pix[(0*radius+0)*dst.Stride+(2*radius-1)],
-				dst.Pix[(2*radius-1)*dst.Stride+(0*radius+0)],
-				dst.Pix[(2*radius-1)*dst.Stride+(2*radius-1)],
-			}
-			if corners != [4]uint8{} {
-				t.Errorf("radius=%d, n=%d: corners were not all zero: %v", radius, n, corners)
-				continue
-			}
-			center := dst.Pix[radius*dst.Stride+radius]
-			if center != 0xff {
-				t.Errorf("radius=%d, n=%d: center: got %#02x, want 0xff", radius, n, center)
-				continue
+			if err := checkCornersCenter(dst); err != nil {
+				t.Errorf("radius=%d, n=%d: %v", radius, n, err)
 			}
 		}
+	}
+}
+
+// checkCornersCenter checks that the corners of the image are all 0x00 and the
+// center is 0xff.
+func checkCornersCenter(m *image.Alpha) error {
+	z := m.Bounds().Size()
+	corners := [4]uint8{
+		m.Pix[(0*z.Y+0)*m.Stride+(0*z.X+0)],
+		m.Pix[(0*z.Y+0)*m.Stride+(1*z.X-1)],
+		m.Pix[(1*z.Y-1)*m.Stride+(0*z.X+0)],
+		m.Pix[(1*z.Y-1)*m.Stride+(1*z.X-1)],
+	}
+	if corners != [4]uint8{} {
+		return fmt.Errorf("corners were not all zero: %v", corners)
+	}
+	center := m.Pix[(z.Y/2)*m.Stride+(z.X/2)]
+	if center != 0xff {
+		return fmt.Errorf("center: got %#02x, want 0xff", center)
+	}
+	return nil
+}
+
+func TestRasterizeAlmostAxisAligned(t *testing.T) {
+	z := newRasterizer(8, 8)
+
+	z.moveTo(point{2, 2})
+	z.lineTo(point{6, math.Nextafter32(2, 0)})
+	z.lineTo(point{6, 6})
+	z.lineTo(point{math.Nextafter32(2, 0), 6})
+	z.closePath()
+
+	dst := image.NewAlpha(z.Bounds())
+	if haveAccumulateSIMD {
+		accumulateSIMD(dst.Pix, z.a)
+	} else {
+		accumulate(dst.Pix, z.a)
+	}
+
+	if err := checkCornersCenter(dst); err != nil {
+		t.Error(err)
 	}
 }
 

@@ -195,12 +195,16 @@ func (z *rasterizer) moveTo(p point) {
 func (z *rasterizer) lineTo(q point) {
 	p := z.last
 	z.last = q
-	if p.y == q.y {
-		return
-	}
 	dir := float32(1)
 	if p.y > q.y {
 		dir, p, q = -1, q, p
+	}
+	// Horizontal line segments yield no change in coverage. Almost horizontal
+	// segments would yield some change, in ideal math, but the computation
+	// further below, involving 1 / (q.y - p.y), is unstable in floating point
+	// math, so we treat the segment as if it was perfectly horizontal.
+	if q.y-p.y <= 0.000001 {
+		return
 	}
 	dxdy := (q.x - p.x) / (q.y - p.y)
 
