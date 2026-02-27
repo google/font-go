@@ -1,5 +1,8 @@
 # font-go
 
+*The canonical repository's location moved on February 2026, from
+github.com/google/font-go to github.com/nigeltao/font-go*
+
 This is a port of https://github.com/google/font-rs to the Go programming
 language.
 
